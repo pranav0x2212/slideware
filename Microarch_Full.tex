@@ -12,6 +12,8 @@
 \usepackage{parskip}
 \usepackage{caption}
 \usepackage{hyperref}
+\usepackage{float}
+\usepackage{booktabs}
 
 \definecolor{NavyD}{HTML}{0D1B2A}
 \definecolor{CliD} {HTML}{1A6060}
@@ -125,9 +127,9 @@ the MC block only.
 \label{fig:sys}
 \end{figure}
 
-\section{Client Domain}
+\section{Client Interface (CIF)}
 
-The Client Domain terminates the AXI4 subordinate port and converts burst transactions
+The Client Interface (CIF) terminates the AXI4 subordinate port and converts burst transactions
 into a stream of normalized read and write commands. It has no knowledge of DRAM timing,
 bank state, or refresh.
 
@@ -179,7 +181,7 @@ row-miss writes. Open-page vs.\ close-page policy is configurable per rank.
 The \textbf{Write Data Path} serializes write data onto the DFI bus with correct
 write-latency alignment and drives byte-mask signals. The \textbf{Read Data Path}
 captures returning DFI data, associates it with the pending transaction tag, and
-forwards it back to the Client Domain. All PHY commands are issued over the
+forwards it back to the Client Interface (CIF). All PHY commands are issued over the
 \textbf{DFI Interface}; the RMC never drives DRAM pins directly.
 
 \noindent The complete microarchitecture block diagram is on the following page.
@@ -243,7 +245,7 @@ forwards it back to the Client Domain. All PHY commands are issued over the
   \node[RGN=DrmD,fit=(bfsm)(tctl)(maint)(sched)(wdp)(rdp)(dfi),inner sep=14pt] (drgn) {};
 \end{scope}
 
-\node[font=\large\bfseries,color=CliD,above=8pt] at (crgn.north) {Client Domain};
+\node[font=\large\bfseries,color=CliD,above=8pt] at (crgn.north) {Client Interface (CIF)};
 \node[font=\large\bfseries,color=MCD, above=8pt] at (mrgn.north) {MC Core};
 \node[font=\large\bfseries,color=DrmD,above=8pt] at (drgn.north) {DRAM Domain};
 
@@ -295,9 +297,159 @@ forwards it back to the Client Domain. All PHY commands are issued over the
 
 \vspace{8pt}
 {\small\textbf{Figure 2:} Full microarchitecture block diagram of the RMC.
-\textcolor{CliD}{\textbf{Teal}}: Client Domain;
+\textcolor{CliD}{\textbf{Teal}}: Client Interface (CIF);
 \textcolor{MCD}{\textbf{Blue}}: MC Core;
 \textcolor{DrmD}{\textbf{Amber}}: DRAM Domain.
 The CDC bar is the sole crossing point between the two clock domains.}
+
+\newpage
+\thispagestyle{fancy}
+\raggedright\small
+
+{\normalsize\bfseries\color{NavyD} 6\enspace Burst Splitter}\par\vspace{4pt}
+
+The Burst Splitter sits between the AXI port and the Address Translator.
+Its job is to take an incoming AXI burst and break it down into memory commands
+the DRAM scheduler can directly consume. This happens in two stages.
+
+Stage~1 checks whether the burst crosses a DRAM row (page) boundary, determined
+by the address mapping in the config registers. If it does, the burst is split
+into sub-transactions each confined to a single row. If not, it passes straight
+through to Stage~2.
+
+Stage~2 checks whether each sub-transaction fits within a single memory command,
+taking into account the configured burst length and start column address alignment.
+If not, it gets chopped into multiple memory commands. The output goes into the
+command pool as \texttt{WR\_CMD} or \texttt{RD\_CMD} packets.
+
+Both stages support compile-time enable/disable. When Stage~1 is disabled,
+incoming AXI bursts must not cross a page boundary. When Stage~2 is disabled,
+each transaction must already be sized to fit within a single memory command.
+
+\vspace{8pt}
+{\small\bfseries\color{DfiD} 6.1\enspace AXI Feature Decisions}\par\vspace{4pt}
+
+\begin{tabular}{p{4.0cm} p{3.5cm} p{11cm}}
+\toprule
+\textbf{Feature} & \textbf{Decision} & \textbf{Rationale} \\
+\midrule
+Burst type          & INCR only          & Covers all standard memory traffic. WRAP adds splitter complexity with little benefit. FIXED is not useful for DRAM access. \\[3pt]
+Data bus width      & 64-bit             & Sufficient for target DDR generations. Can be widened via config registers if needed. \\[3pt]
+Outstanding IDs     & Multiple supported & Needed to hide DRAM latency. The Reorder Buffer handles out-of-order returns and retires responses in AXI-ID order. \\[3pt]
+Narrow transfers    & Not supported      & Adds byte-lane steering complexity. All transfers assumed to use the full bus width. \\[3pt]
+Unaligned transfers & Not supported      & High cost, low practical gain. AXI masters are expected to issue aligned bursts. \\[3pt]
+Exclusive access    & Not supported      & Requires a reservation table. Out of scope for this design phase. \\[3pt]
+QoS signals         & Not supported      & Scheduler complexity not justified at this stage. \\
+\bottomrule
+\end{tabular}
+
+\vspace{10pt}
+{\small\bfseries\color{DfiD} 6.2\enspace Internal Pipeline}\par\vspace{4pt}
+
+\definecolor{TealFill}    {HTML}{E1F5EE}
+\definecolor{TealStroke}  {HTML}{0F6E56}
+\definecolor{PurpleFill}  {HTML}{EEEDFE}
+\definecolor{PurpleStroke}{HTML}{534AB7}
+\definecolor{BlueFill}    {HTML}{E6F1FB}
+\definecolor{BlueStroke}  {HTML}{185FA5}
+\definecolor{AmberFill}   {HTML}{FAEEDA}
+\definecolor{AmberStroke} {HTML}{854F0B}
+\definecolor{GreenFill}   {HTML}{EAF3DE}
+\definecolor{GreenStroke} {HTML}{3B6D11}
+\definecolor{SigGray}     {HTML}{5F5E5A}
+\definecolor{BypassRed}   {HTML}{993C1D}
+
+\tikzset{
+  bsblock/.style={draw, rounded corners=4pt, minimum width=4.4cm,
+    minimum height=1.3cm, align=center, line width=0.5pt,
+    inner sep=6pt, font=\small\bfseries},
+  bsstagebox/.style={draw, rounded corners=8pt, line width=0.6pt, dashed, inner sep=14pt},
+  bsnotebox/.style={draw=BypassRed, rounded corners=4pt, line width=0.5pt,
+    fill=white, inner sep=7pt, align=left,
+    font=\fontsize{7}{9}\selectfont, text=BypassRed},
+  bsio/.style={bsblock, fill=TealFill,   draw=TealStroke,   text=TealStroke},
+  bss1/.style={bsblock, fill=PurpleFill, draw=PurpleStroke, text=PurpleStroke},
+  bss2/.style={bsblock, fill=BlueFill,   draw=BlueStroke,   text=BlueStroke},
+  bscfg/.style={bsblock, fill=AmberFill, draw=AmberStroke,  text=AmberStroke,
+    minimum width=3.2cm, minimum height=1.0cm},
+  bsout/.style={bsblock, fill=GreenFill, draw=GreenStroke,  text=GreenStroke,
+    minimum width=3.0cm},
+  bssig/.style={-{Stealth[length=5pt,width=4pt]}, color=SigGray, line width=0.6pt},
+  bssd/.style={-{Stealth[length=4pt,width=3.5pt]}, color=SigGray, line width=0.5pt, dashed},
+  bslbl/.style={font=\fontsize{6.5}{8}\selectfont\itshape, text=SigGray, fill=white, inner sep=1.5pt},
+}
+
+\setcounter{figure}{2}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+
+\node[bsio]  (IN)   at ( 1.5,-1.5) {AXI Request\\[2pt]{\fontsize{6.5}{8}\selectfont\mdseries\color{SigGray}\{addr, len, size, id\}}};
+\node[bscfg] (CFG1) at ( 7.5, 2.2) {Config Regs\\[2pt]{\fontsize{6.5}{8}\selectfont\mdseries\color{SigGray}addr map, page size}};
+\node[bss1]  (S1C)  at ( 7.5, 0.0) {Page Boundary Check\\[2pt]{\fontsize{6.5}{8}\selectfont\mdseries\color{SigGray}does burst cross a row boundary?}};
+\node[bss1]  (S1S)  at ( 7.5,-3.0) {Page Boundary Split\\[2pt]{\fontsize{6.5}{8}\selectfont\mdseries\color{SigGray}emit one sub-transaction per row}};
+\node[bscfg] (CFG2) at (15.0, 2.2) {Config Regs\\[2pt]{\fontsize{6.5}{8}\selectfont\mdseries\color{SigGray}mem type, burst length}};
+\node[bss2]  (S2C)  at (15.0, 0.0) {Burst Length Check\\[2pt]{\fontsize{6.5}{8}\selectfont\mdseries\color{SigGray}exceeds BL or column misaligned?}};
+\node[bss2]  (S2S)  at (15.0,-3.0) {Memory Cmd Split\\[2pt]{\fontsize{6.5}{8}\selectfont\mdseries\color{SigGray}split to BL, align start column}};
+\node[bsout] (OUT)  at (21.8,-1.5) {Cmd Pool\\[2pt]{\fontsize{6.5}{8}\selectfont\mdseries\color{SigGray}\texttt{WR\_CMD / RD\_CMD + tag}}};
+
+\coordinate (FORK) at (4.2,-1.5);
+\draw[bssig] (IN.east) -- (FORK);
+\draw[bssig] (FORK) |- (S1C.west);
+\draw[bssig] (FORK) |- (S1S.west);
+\node[bslbl, anchor=north] at (5.8,-0.62) {\{addr,len,size,id\}};
+
+\draw[bssig] (S1C.south) -- (S1S.north)
+  node[bslbl, midway, right=5pt] {boundary crossed};
+\draw[bssig] (S1C.east) -- (S2C.west)
+  node[bslbl, midway, above=4pt] {no split --- pass through};
+\draw[bssig] (S1S.east) -- (S2S.west)
+  node[bslbl, midway, above=4pt] {sub-transactions};
+\draw[bssig] (S2C.south) -- (S2S.north);
+\node[bslbl, align=center, anchor=center] at (16.4,-1.5) {exceeds BL /\\[-1pt]misaligned};
+
+\coordinate (MERGE2) at (19.5,-1.5);
+\draw[SigGray, line width=0.6pt] (S2C.east) -- ++(0.8,0) |- (MERGE2);
+\draw[SigGray, line width=0.6pt] (S2S.east) -- ++(0.8,0) |- (MERGE2);
+\draw[bssig] (MERGE2) -- (OUT.west);
+\node[bslbl, anchor=south] at (18.0,-0.62) {fits in one cmd};
+\node[bslbl, anchor=north] at (18.0,-2.38) {memory commands};
+
+\draw[bssd] (CFG1.south) -- (S1C.north)
+  node[bslbl, midway, right=3pt] {page size};
+\draw[bssd] (CFG2.south) -- (S2C.north)
+  node[bslbl, midway, right=3pt] {BL, mem type};
+
+\begin{scope}[on background layer]
+  \node[bsstagebox, fill=PurpleFill, fill opacity=0.07, draw=PurpleStroke,
+    fit=(CFG1)(S1C)(S1S),
+    label={[font=\small\bfseries, text=PurpleStroke, yshift=4pt]
+           above:Stage 1 \textemdash\ Page Boundary Split}] {};
+  \node[bsstagebox, fill=BlueFill, fill opacity=0.07, draw=BlueStroke,
+    fit=(CFG2)(S2C)(S2S),
+    label={[font=\small\bfseries, text=BlueStroke, yshift=4pt]
+           above:Stage 2 \textemdash\ Memory Command Split}] {};
+\end{scope}
+
+\node[bsnotebox, text width=3.4cm, anchor=north east] at (26.0,3.5) {%
+  \textbf{Compile-time flags}\\[4pt]
+  \texttt{STAGE1\_EN=0}\\
+  Stage~1 bypassed.\\
+  AXI burst must not\\
+  cross a page boundary.\\[5pt]
+  \texttt{STAGE2\_EN=0}\\
+  Stage~2 bypassed.\\
+  Transfer must fit\\
+  within one memory\\
+  command.%
+};
+
+\end{tikzpicture}
+\caption{Burst Splitter internal pipeline. Stage~1 splits an AXI request at row
+boundaries into linear transactions each confined to a single row. Stage~2 divides
+each into memory commands sized to the configured burst length and aligned to the
+start column address. Both stages are individually enabled or disabled at compile time.}
+\label{fig:burst-splitter}
+\end{figure}
 
 \end{document}
