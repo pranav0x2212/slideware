@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026/Arch Linux) (preloaded format=pdflatex 2026.3.7)  13 MAR 2026 20:58
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026/Arch Linux) (preloaded format=pdflatex 2026.3.7)  27 MAR 2026 21:58
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -1199,16 +1199,16 @@ Package pdftex.def Info: images/chips_logo.png  used on input line 92.
 (pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
 File: images/chips_logo.png Graphic file (type png)
 <use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 109.
+Package pdftex.def Info: images/chips_logo.png  used on input line 110.
 (pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
-LaTeX Font Info:    Trying to load font information for U+msa on input line 109
+LaTeX Font Info:    Trying to load font information for U+msa on input line 110
 .
  (/usr/share/texmf-dist/tex/latex/amsfonts/umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 ) (/usr/share/texmf-dist/tex/latex/microtype/mt-msa.cfg
 File: mt-msa.cfg 2006/02/04 v1.1 microtype config. file: AMS symbols (a) (RS)
 )
-LaTeX Font Info:    Trying to load font information for U+msb on input line 109
+LaTeX Font Info:    Trying to load font information for U+msb on input line 110
 .
 
 (/usr/share/texmf-dist/tex/latex/amsfonts/umsb.fd
@@ -1218,7 +1218,7 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 File: mt-msb.cfg 2005/06/01 v1.0 microtype config. file: AMS symbols (b) (RS)
 )
 LaTeX Font Info:    Trying to load font information for OT1+mathkerncmss on inp
-ut line 109.
+ut line 110.
 
 (/usr/share/texmf-dist/tex/latex/sansmathaccent/ot1mathkerncmss.fd
 File: ot1mathkerncmss.fd 2020/01/31 Fontinst v1.933 font definitions for OT1/ma
@@ -1230,7 +1230,7 @@ Package microtype Info: Loading generic protrusion settings for font family
 (microtype)             See the microtype manual for details.
 File: images/chips_logo.png Graphic file (type png)
 <use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 109.
+Package pdftex.def Info: images/chips_logo.png  used on input line 110.
 (pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
  [1
 
@@ -1238,120 +1238,142 @@ Package pdftex.def Info: images/chips_logo.png  used on input line 109.
 NG copy)>]
 File: images/chips_logo.png Graphic file (type png)
 <use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 174.
+Package pdftex.def Info: images/chips_logo.png  used on input line 175.
 (pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
 File: images/chips_logo.png Graphic file (type png)
 <use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 174.
+Package pdftex.def Info: images/chips_logo.png  used on input line 175.
 (pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
  [2
 
 ]
 File: images/chips_logo.png Graphic file (type png)
 <use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 213.
+Package pdftex.def Info: images/chips_logo.png  used on input line 218.
 (pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
-File: images/chips_logo.png Graphic file (type png)
-<use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 213.
-(pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
- [3
+<images/dfi5_2.png, id=32, 561.09625pt x 624.3325pt>
+File: images/dfi5_2.png Graphic file (type png)
+<use images/dfi5_2.png>
+Package pdftex.def Info: images/dfi5_2.png  used on input line 218.
+(pdftex.def)             Requested size: 135.79863pt x 151.10036pt.
 
-]
+Overfull \vbox (52.28024pt too high) detected at line 218
+ []
+
 File: images/chips_logo.png Graphic file (type png)
 <use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 263.
+Package pdftex.def Info: images/chips_logo.png  used on input line 218.
+(pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
+[3
+
+ <./images/dfi5_2.png>]
+File: images/chips_logo.png Graphic file (type png)
+<use images/chips_logo.png>
+Package pdftex.def Info: images/chips_logo.png  used on input line 269.
 (pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
 File: images/chips_logo.png Graphic file (type png)
 <use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 263.
+Package pdftex.def Info: images/chips_logo.png  used on input line 269.
 (pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
  [4
 
 ]
 File: images/chips_logo.png Graphic file (type png)
 <use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 338.
+Package pdftex.def Info: images/chips_logo.png  used on input line 344.
 (pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
 Package microtype Info: Loading generic protrusion settings for font family
 (microtype)             `cmss' (encoding: TS1).
 (microtype)             For optimal results, create family-specific settings.
 (microtype)             See the microtype manual for details.
 
-Overfull \vbox (28.47469pt too high) detected at line 338
+Overfull \vbox (28.47469pt too high) detected at line 344
  []
 
 File: images/chips_logo.png Graphic file (type png)
 <use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 338.
+Package pdftex.def Info: images/chips_logo.png  used on input line 344.
 (pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
 [5
 
 {/usr/share/texmf-dist/fonts/enc/dvips/cm-super/cm-super-ts1.enc}]
 File: images/chips_logo.png Graphic file (type png)
 <use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 398.
+Package pdftex.def Info: images/chips_logo.png  used on input line 371.
+(pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
+<images/eye.png, id=63, 414.54875pt x 343.2825pt>
+File: images/eye.png Graphic file (type png)
+<use images/eye.png>
+Package pdftex.def Info: images/eye.png  used on input line 371.
+(pdftex.def)             Requested size: 156.68646pt x 129.7468pt.
+File: images/chips_logo.png Graphic file (type png)
+<use images/chips_logo.png>
+Package pdftex.def Info: images/chips_logo.png  used on input line 371.
+(pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
+ [6
+
+ <./images/eye.png>]
+File: images/chips_logo.png Graphic file (type png)
+<use images/chips_logo.png>
+Package pdftex.def Info: images/chips_logo.png  used on input line 402.
+(pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
+<images/u_eye.png, id=70, 287.0725pt x 201.75375pt>
+File: images/u_eye.png Graphic file (type png)
+<use images/u_eye.png>
+Package pdftex.def Info: images/u_eye.png  used on input line 402.
+(pdftex.def)             Requested size: 104.45764pt x 73.41016pt.
+<images/t_eye.png, id=71, 289.08pt x 189.70876pt>
+File: images/t_eye.png Graphic file (type png)
+<use images/t_eye.png>
+Package pdftex.def Info: images/t_eye.png  used on input line 402.
+(pdftex.def)             Requested size: 104.45764pt x 68.54982pt.
+File: images/chips_logo.png Graphic file (type png)
+<use images/chips_logo.png>
+Package pdftex.def Info: images/chips_logo.png  used on input line 402.
+(pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
+ [7
+
+ <./images/u_eye.png> <./images/t_eye.png>]
+File: images/chips_logo.png Graphic file (type png)
+<use images/chips_logo.png>
+Package pdftex.def Info: images/chips_logo.png  used on input line 464.
 (pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
 
-Overfull \hbox (18.59143pt too wide) in paragraph at lines 398--398
+Overfull \hbox (18.59143pt too wide) in paragraph at lines 464--464
  [][] 
  []
 
 
-Overfull \vbox (7.26343pt too high) detected at line 398
+Overfull \vbox (7.26343pt too high) detected at line 464
  []
 
 File: images/chips_logo.png Graphic file (type png)
 <use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 398.
+Package pdftex.def Info: images/chips_logo.png  used on input line 464.
 (pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
-[6
+[8
 
 ]
 File: images/chips_logo.png Graphic file (type png)
 <use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 453.
+Package pdftex.def Info: images/chips_logo.png  used on input line 519.
 (pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
 File: images/chips_logo.png Graphic file (type png)
 <use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 453.
+Package pdftex.def Info: images/chips_logo.png  used on input line 519.
 (pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
- [7
+ [9
 
 ]
 File: images/chips_logo.png Graphic file (type png)
 <use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 489.
+Package pdftex.def Info: images/chips_logo.png  used on input line 555.
 (pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
 File: images/chips_logo.png Graphic file (type png)
 <use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 489.
+Package pdftex.def Info: images/chips_logo.png  used on input line 555.
 (pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
- [8
-
-]
-File: images/chips_logo.png Graphic file (type png)
-<use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 580.
-(pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
-LaTeX Font Info:    Trying to load font information for OMS+cmss on input line 
-580.
-LaTeX Font Info:    No file OMScmss.fd. on input line 580.
-
-
-LaTeX Font Warning: Font shape `OMS/cmss/m/n' undefined
-(Font)              using `OMS/cmsy/m/n' instead
-(Font)              for symbol `textbraceright' on input line 580.
-
-
-Overfull \vbox (14.019pt too high) detected at line 580
- []
-
-File: images/chips_logo.png Graphic file (type png)
-<use images/chips_logo.png>
-Package pdftex.def Info: images/chips_logo.png  used on input line 580.
-(pdftex.def)             Requested size: 52.39716pt x 24.18501pt.
-[9
+ [10
 
 ]
 \tf@nav=\write6
@@ -1368,19 +1390,15 @@ Package pdftex.def Info: images/chips_logo.png  used on input line 580.
 LaTeX2e <2025-11-01>
 L3 programming layer <2026-01-19>
  ***********
-
-
-LaTeX Font Warning: Some font shapes were not available, defaults substituted.
-
 Package rerunfilecheck Info: File `DFI_PHY_v4.out' has not changed.
 (rerunfilecheck)             Checksum: D41D8CD98F00B204E9800998ECF8427E;0.
  ) 
 Here is how much of TeX's memory you used:
- 42856 strings out of 469515
- 1037022 string characters out of 5470808
- 1557599 words of memory out of 5000000
- 70697 multiletter control sequences out of 15000+600000
- 643092 words of font info for 127 fonts, out of 8000000 for 9000
+ 42684 strings out of 469515
+ 1034343 string characters out of 5470808
+ 1530827 words of memory out of 5000000
+ 70515 multiletter control sequences out of 15000+600000
+ 646358 words of font info for 140 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
  128i,21n,123p,1007b,2533s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/share/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/
@@ -1396,12 +1414,14 @@ fb></usr/share/texmf-dist/fonts/type1/public/amsfonts/cm/cmssi9.pfb></usr/share
 /texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texmf-dist/fo
 nts/type1/public/amsfonts/cm/cmsy5.pfb></usr/share/texmf-dist/fonts/type1/publi
 c/amsfonts/cm/cmsy7.pfb></usr/share/texmf-dist/fonts/type1/public/amsfonts/cm/c
-msy9.pfb></usr/share/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb></usr
-/share/texmf-dist/fonts/type1/public/cm-super/sfss0900.pfb>
-Output written on DFI_PHY_v4.pdf (9 pages, 334956 bytes).
+msy8.pfb></usr/share/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy9.pfb></usr/
+share/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt10.pfb></usr/share/texmf-di
+st/fonts/type1/public/amsfonts/cm/cmtt9.pfb></usr/share/texmf-dist/fonts/type1/
+public/cm-super/sfss0900.pfb>
+Output written on DFI_PHY_v4.pdf (10 pages, 733582 bytes).
 PDF statistics:
- 167 PDF objects out of 1000 (max. 8388607)
- 109 compressed objects within 2 object streams
- 19 named destinations out of 1000 (max. 500000)
- 44086 words of extra memory for PDF output out of 51595 (max. 10000000)
+ 186 PDF objects out of 1000 (max. 8388607)
+ 119 compressed objects within 2 object streams
+ 21 named destinations out of 1000 (max. 500000)
+ 45642 words of extra memory for PDF output out of 51595 (max. 10000000)
 

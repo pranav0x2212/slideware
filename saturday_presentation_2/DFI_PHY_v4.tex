@@ -101,6 +101,7 @@
   \vspace{28pt}
   \begin{center}
     \begin{tabular}{rl}
+      \multicolumn{2}{c}{\textbf{Mentor: Mahesh A}}\\[8pt]
       \textbf{Pranav M}   & \texttt{PES2UG23EC076}\\[8pt]
       \textbf{Lalith}     & \texttt{PES2UG23EC074}\\[8pt]
       \textbf{Harshini S} & \texttt{PES2UG23EC058}\\
@@ -173,44 +174,49 @@
 \end{columns}
 \end{frame}
 
-%% ── SLIDE 2 – System Block Diagram ──────────────────────────
-\begin{frame}{System Block Diagram}
-\centering
-\begin{tikzpicture}[scale=0.88, transform shape]
 
-  \node[box=ddrblue,minimum width=16mm,minimum height=14mm] (m0) at (0,1.1)  {AXI\\M0};
-  \node[box=ddrblue,minimum width=16mm,minimum height=14mm] (m1) at (0,-1.1) {AXI\\M1};
+%% ── SLIDE 2 – MC↔PHY DFI Signal Groups ──────────────────────
+\begin{frame}{DFI Interface: MC $\leftrightarrow$ PHY Signal Groups}
+\begin{columns}[T]
 
-  \node[box=ddrgreen,minimum width=20mm,minimum height=32mm,font=\small\bfseries]
-        (ic) at (2.5,0) {Inter\\connect};
+\begin{column}{0.52\textwidth}
+  \centering
+  \includegraphics[width=0.6\linewidth, keepaspectratio]{images/dfi5_2.png}
+\end{column}
 
-  \node[box=ddrblue,minimum width=22mm,minimum height=32mm,font=\small\bfseries]
-        (mc) at (5.4,0) {MC};
+\begin{column}{0.44\textwidth}
+  \vspace{8pt}
+  \textbf{\color{ddrblue}Command Interface}
+  \begin{itemize}\setlength\itemsep{2pt}\small
+    \item Address, bank, CS\#, CKE, ODT, RAS\#, CAS\#, WE\#
+    \item MC $\rightarrow$ PHY; alert feedback PHY $\rightarrow$ MC
+  \end{itemize}
 
-  \node[phy,minimum width=22mm,minimum height=28mm,font=\small\bfseries]
-        (phy) at (8.3,0) {DDR\\UPHY};
+  \vspace{6pt}
+  \textbf{\color{ddrteal}Write Data Interface}
+  \begin{itemize}\setlength\itemsep{2pt}\small
+    \item \texttt{dfi\_wrdata}, \texttt{dfi\_wrdata\_en}, \texttt{dfi\_wrdata\_mask}
+    \item CRC and ECC sideband signals
+  \end{itemize}
 
-  \foreach \name/\y/\col in {
-    LPDDR3/3.2/ddrteal, LPDDR2/2.1/ddrteal, LPDDR/1.0/ddrteal,
-    DDR/0.0/ddrblue, DDR2/-1.0/ddrblue, DDR3/-1.8/ddrblue,
-    DDR4/-2.6/ddrblue, DDR5/-3.4/ddrblue}{
-    \node[ddrbox=\col,minimum width=18mm] (\name) at (11.3,\y) {\name};
-  }
+  \vspace{6pt}
+  \textbf{\color{ddrgreen}Read Data Interface}
+  \begin{itemize}\setlength\itemsep{2pt}\small
+    \item \texttt{dfi\_rddata\_en} MC $\rightarrow$ PHY (look-ahead)
+    \item \texttt{dfi\_rddata}, \texttt{dfi\_rddata\_valid} PHY $\rightarrow$ MC
+  \end{itemize}
 
-  \draw[arr] (m0.east) -- node[above,font=\tiny]{AXI/CHI} (m0.east -| ic.west);
-  \draw[arr] (m1.east) -- node[below,font=\tiny]{AXI/CHI} (m1.east -| ic.west);
-  \draw[arr=ddrblue,<->] (ic.east) -- node[above,font=\tiny]{AXI/CHI} (mc.west);
-  \draw[arr=ddrteal,<->] (mc.east) -- node[above,font=\tiny]{Std UPHY IF} (phy.west);
+  \vspace{6pt}
+  \textbf{\color{ddrgold}Update / Status / PHY Managed}
+  \begin{itemize}\setlength\itemsep{2pt}\small
+    \item Handshake: \texttt{ctrlupd}, \texttt{phyupd}, \texttt{phymngd}
+    \item Freq ratio, init start/complete, error reporting
+  \end{itemize}
+\end{column}
 
-  \foreach \name in {LPDDR3,LPDDR2,LPDDR,DDR,DDR2,DDR3,DDR4,DDR5}{
-    \draw[arr=ddrblue,-{Stealth[length=4pt]}]
-      (phy.east |- \name.west) -- (\name.west);
-  }
-  \draw[thick,ddrblue] (phy.east) -- ++(0.35,0) |-($(LPDDR3.west)+(-0.35,0)$);
-  \draw[thick,ddrblue] ($(phy.east)+(0.35,0)$)  |-($(DDR5.west)+(-0.35,0)$);
-
-\end{tikzpicture}
+\end{columns}
 \end{frame}
+
 
 %% ── SLIDE 3 – Inter-Lane Skew ───────────────────────────────
 \begin{frame}{Inter-Lane Skew: Off-Die Signal Integrity}
@@ -337,7 +343,67 @@
 \end{columns}
 \end{frame}
 
-%% ── SLIDE 5 – Why Picoseconds Matter ───────────────────────
+%% ── SLIDE 5 – Eye Diagram Fundamentals ────────────────────────
+\begin{frame}{Eye Diagram Fundamentals}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+  \centering
+  \includegraphics[width=0.75\linewidth, keepaspectratio]{images/eye.png}
+\end{column}
+\begin{column}{0.48\textwidth}
+  \vspace{4pt}
+  \textbf{\color{ddrblue}Key Regions}
+  \begin{itemize}\setlength\itemsep{2pt}\footnotesize
+    \item \textbf{Eye Width:} horizontal opening between transition windows
+    \item \textbf{Transition Window:} region where 0$\rightarrow$1 or 1$\rightarrow$0 switching occurs
+    \item \textbf{Steady-State Window:} stable HIGH or LOW; sampled here
+    \item \textbf{Unit Interval (UI):} one bit period; eye must open within it
+  \end{itemize}
+  \vspace{4pt}
+  \textbf{\color{ddrteal}Why it matters}
+  \begin{itemize}\setlength\itemsep{2pt}\footnotesize
+    \item Receiver samples at eye centre for maximum margin
+    \item Noise and jitter reduce eye opening
+    \item At DDR5-6400: UI $=$ 156\,ps --- any skew directly closes the eye
+  \end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+%% ── SLIDE 6 – Trained vs Untrained Eye ──────────────────────
+\begin{frame}{Eye Diagram: Trained vs Untrained}
+\begin{columns}[T]
+
+\begin{column}{0.48\textwidth}
+  \centering
+  \textbf{\color{ddrred}Untrained Eye}\\[4pt]
+  \includegraphics[width=0.5\linewidth, keepaspectratio]{images/u_eye.png}
+  \begin{itemize}\setlength\itemsep{3pt}\small
+    \item Lane skew $\delta_i$ closes eye horizontally
+    \item VREF offset closes eye vertically
+    \item ISI and jitter blur transition edges
+    \item High BER — unreliable data capture
+  \end{itemize}
+\end{column}
+
+\begin{column}{0.48\textwidth}
+  \centering
+  \textbf{\color{ddrgreen}Trained \& Calibrated Eye}\\[4pt]
+  \includegraphics[width=0.5\linewidth, keepaspectratio]{images/t_eye.png}
+  \begin{itemize}\setlength\itemsep{3pt}\small
+    \item Write Levelling corrects DQS-to-CK skew $\delta_i$
+    \item Read centering places sample point at eye centre
+    \item ZQ calibration sets correct driver impedance
+    \item 2D VREF scan optimises voltage margin $M_V$
+  \end{itemize}
+\end{column}
+
+\end{columns}
+\end{frame}
+
+
+
+%% ── SLIDE 7 – Why Picoseconds Matter ───────────────────────
 \begin{frame}{Why Picoseconds Matter at Modern DDR Speeds}
 \begin{columns}[T]
 
@@ -397,7 +463,7 @@
 \end{columns}
 \end{frame}
 
-%% ── SLIDE 6 – DFI Interface ─────────────────────────────────
+%% ── SLIDE 8 – DFI Interface ─────────────────────────────────
 \begin{frame}{DFI: The Standard MC--PHY Interface}
 \begin{columns}[T]
 
@@ -452,7 +518,7 @@
 \end{columns}
 \end{frame}
 
-%% ── SLIDE 7 – DFI 5.1 Key Features ─────────────────────────
+%% ── SLIDE 9 – DFI 5.1 Key Features ─────────────────────────
 \begin{frame}{DFI 5.1 Key Features}
 \begin{columns}[T]
 
@@ -486,97 +552,6 @@
 \end{column}
 
 \end{columns}
-\end{frame}
-
-%% ── SLIDE 8 – DFI 5.1 Architecture ─────────────────────────
-\begin{frame}{DFI 5.1 Architecture: Universal MC + Generation-Specific PHYs}
-\centering
-\begin{tikzpicture}[scale=0.66, transform shape,
-   every node/.style={font=\scriptsize}]
-
-  %% Memory Controller
-  \node[rectangle,rounded corners=5pt,
-        draw=ddrblue,fill=ddrblue!15,very thick,
-        minimum width=26mm,minimum height=95mm,
-        font=\small\bfseries,text=ddrblue,align=center]
-    (mc) at (-3.6,0) {Memory\\Controller\\(MC)};
-
-  %% UPHY
-  \node[rectangle,rounded corners=5pt,
-        draw=ddrgold,fill=ddrgold!18,very thick,
-        minimum width=28mm,minimum height=95mm,
-        font=\small\bfseries,text=ddrblue,align=center]
-    (uphy) at (0,0) {DFI 5.1\\Universal\\PHY\\(UPHY)};
-
-  %% DFI 5.1 bus
-  \draw[ddrgold,very thick,<->]
-    (mc.east) -- node[above,font=\scriptsize\bfseries,ddrgold]{DFI 5.1}
-                  node[below,font=\tiny,ddrgray]{Std IF} (uphy.west);
-
-  \def\phyX{4.0}
-  \def\ddrX{7.2}
-
-  \foreach \name/\y/\pcol/\dcol in {
-    LPDDR3/ 3.35/ddrteal/ddrteal,
-    LPDDR2/ 2.25/ddrteal/ddrteal,
-    LPDDR/  1.15/ddrteal/ddrteal,
-    DDR/    0.05/ddrblue/ddrblue,
-    DDR2/  -0.95/ddrblue/ddrblue,
-    DDR3/  -2.05/ddrblue/ddrblue,
-    DDR4/  -3.05/ddrblue/ddrblue,
-    DDR5/  -4.05/ddrred/ddrred}{
-
-    \node[rectangle,rounded corners=3pt,
-          draw=\pcol,fill=\pcol!15,thick,
-          minimum width=22mm,minimum height=8mm,
-          text=\pcol!80!black,align=center]
-      (phy\name) at (\phyX,\y) {\name\ PHY};
-
-    \node[rectangle,rounded corners=3pt,
-          draw=\dcol!70,fill=\dcol!8,
-          minimum width=18mm,minimum height=8mm,
-          text=\dcol!80!black,align=center]
-      (mem\name) at (\ddrX,\y) {\name};
-
-    \draw[\pcol,thick,-{Stealth[length=4pt]}]
-      (uphy.east |- phy\name.west) --
-      node[above,font=\tiny,\pcol]{DFI IF} (phy\name.west);
-
-    \draw[\dcol,thick,-{Stealth[length=4pt]}]
-      (phy\name.east) -- node[above,font=\tiny,\dcol]{DDR IF} (mem\name.west);
-  }
-
-  %% Curly braces: mirror + top-to-bottom = bulge faces RIGHT, label on right
-  %% Braces as text nodes — unaffected by transform shape
-  \node[font=\large,ddrteal,rotate=0] at (8.55, 2.25)
-    {\textcolor{ddrteal}{\scalebox{1}[4.2]{\}}}};
-  \node[font=\tiny\bfseries,ddrteal,align=left] at (9.05, 2.25) {LPDDR\\family};
-
-  \node[font=\large,ddrblue,rotate=0] at (8.55,-1.50)
-    {\textcolor{ddrblue}{\scalebox{1}[6.8]{\}}}};
-  \node[font=\tiny\bfseries,ddrblue,align=left] at (9.05,-1.50) {DDR\\family};
-
-  \node[font=\large,ddrred,rotate=0] at (8.55,-4.05)
-    {\textcolor{ddrred}{\scalebox{1}[1.4]{\}}}};
-  \node[font=\tiny\bfseries,ddrred,align=left] at (9.05,-4.05) {Next\\Gen};
-
-  %% Legend
-  \node[draw=ddrgray,fill=white,rounded corners=3pt,
-        inner sep=4pt,align=left,font=\tiny]
-    at (-3.6,-5.6) {%
-      \textbf{Key:}\quad
-      \tikz\draw[ddrgold,very thick](0,0)--(0.5,0); DFI 5.1\quad
-      \tikz\draw[ddrteal,thick,-{Stealth[length=3pt]}](0,0)--(0.5,0); LPDDR IF\quad
-      \tikz\draw[ddrblue,thick,-{Stealth[length=3pt]}](0,0)--(0.5,0); DDR IF
-    };
-
-  %% Compat note
-  \node[draw=ddrgold,fill=ddrgold!10,rounded corners=3pt,
-        inner sep=4pt,align=center,font=\tiny\bfseries,text width=46mm]
-    at (0,-5.55) {DFI 5.1 backward compatible with\\
-                  DDR1--DDR5 and LPDDR--LPDDR5};
-
-\end{tikzpicture}
 \end{frame}
 
 \end{document}
