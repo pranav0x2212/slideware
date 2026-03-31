@@ -174,8 +174,47 @@
 \end{columns}
 \end{frame}
 
+%% ── SLIDE 2 – System Block Diagram ──────────────────────────
+\begin{frame}{System Block Diagram}
+\centering
+\begin{tikzpicture}[scale=0.88, transform shape]
 
-%% ── SLIDE 2 – MC↔PHY DFI Signal Groups ──────────────────────
+  \node[box=ddrblue,minimum width=16mm,minimum height=14mm] (m0) at (0,1.1)  {AXI\\M0};
+  \node[box=ddrblue,minimum width=16mm,minimum height=14mm] (m1) at (0,-1.1) {AXI\\M1};
+
+  \node[box=ddrgreen,minimum width=20mm,minimum height=32mm,font=\small\bfseries]
+        (ic) at (2.5,0) {Inter\\connect};
+
+  \node[box=ddrblue,minimum width=22mm,minimum height=32mm,font=\small\bfseries]
+        (mc) at (5.4,0) {MC};
+
+  \node[phy,minimum width=22mm,minimum height=28mm,font=\small\bfseries]
+        (phy) at (8.3,0) {DDR\\PHY};
+
+  \foreach \name/\y/\col in {
+    LPDDR3/3.2/ddrteal, LPDDR2/2.1/ddrteal, LPDDR/1.0/ddrteal,
+    DDR/0.0/ddrblue, DDR2/-1.0/ddrblue, DDR3/-1.8/ddrblue,
+    DDR4/-2.6/ddrblue, DDR5/-3.4/ddrblue}{
+    \node[ddrbox=\col,minimum width=18mm] (\name) at (11.3,\y) {\name};
+  }
+
+  \draw[arr] (m0.east) -- node[above,font=\tiny]{AXI/CHI} (m0.east -| ic.west);
+  \draw[arr] (m1.east) -- node[below,font=\tiny]{AXI/CHI} (m1.east -| ic.west);
+  \draw[arr=ddrblue,<->] (ic.east) -- node[above,font=\tiny]{AXI/CHI} (mc.west);
+  \draw[arr=ddrteal,<->] (mc.east) -- node[above,font=\tiny]{Std DFI IF} (phy.west);
+
+  \foreach \name in {LPDDR3,LPDDR2,LPDDR,DDR,DDR2,DDR3,DDR4,DDR5}{
+    \draw[arr=ddrblue,-{Stealth[length=4pt]}]
+      (phy.east |- \name.west) -- (\name.west);
+  }
+  \draw[thick,ddrblue] (phy.east) -- ++(0.35,0) |-($(LPDDR3.west)+(-0.35,0)$);
+  \draw[thick,ddrblue] ($(phy.east)+(0.35,0)$)  |-($(DDR5.west)+(-0.35,0)$);
+
+\end{tikzpicture}
+\end{frame}
+
+
+%% ── SLIDE 3 – MC↔PHY DFI Signal Groups ──────────────────────
 \begin{frame}{DFI Interface: MC $\leftrightarrow$ PHY Signal Groups}
 \begin{columns}[T]
 
@@ -218,7 +257,7 @@
 \end{frame}
 
 
-%% ── SLIDE 3 – Inter-Lane Skew ───────────────────────────────
+%% ── SLIDE 4 – Inter-Lane Skew ───────────────────────────────
 \begin{frame}{Inter-Lane Skew: Off-Die Signal Integrity}
 \begin{columns}[T]
 
@@ -268,7 +307,7 @@
 \end{columns}
 \end{frame}
 
-%% ── SLIDE 4 – Off-Die vs On-Die Delay ──────────────────────
+%% ── SLIDE 5 – Off-Die vs On-Die Delay ──────────────────────
 \begin{frame}{Off-Die vs On-Die Delay}
 \begin{columns}[T]
 
@@ -343,7 +382,7 @@
 \end{columns}
 \end{frame}
 
-%% ── SLIDE 5 – Eye Diagram Fundamentals ────────────────────────
+%% ── SLIDE 6 – Eye Diagram Fundamentals ────────────────────────
 \begin{frame}{Eye Diagram Fundamentals}
 \begin{columns}[T]
 \begin{column}{0.48\textwidth}
@@ -370,7 +409,7 @@
 \end{columns}
 \end{frame}
 
-%% ── SLIDE 6 – Trained vs Untrained Eye ──────────────────────
+%% ── SLIDE 7 – Trained vs Untrained Eye ──────────────────────
 \begin{frame}{Eye Diagram: Trained vs Untrained}
 \begin{columns}[T]
 
@@ -403,7 +442,7 @@
 
 
 
-%% ── SLIDE 7 – Why Picoseconds Matter ───────────────────────
+%% ── SLIDE 8 – Why Picoseconds Matter ───────────────────────
 \begin{frame}{Why Picoseconds Matter at Modern DDR Speeds}
 \begin{columns}[T]
 
@@ -463,7 +502,7 @@
 \end{columns}
 \end{frame}
 
-%% ── SLIDE 8 – DFI Interface ─────────────────────────────────
+%% ── SLIDE 9 – DFI Interface ─────────────────────────────────
 \begin{frame}{DFI: The Standard MC--PHY Interface}
 \begin{columns}[T]
 
@@ -518,7 +557,7 @@
 \end{columns}
 \end{frame}
 
-%% ── SLIDE 9 – DFI 5.1 Key Features ─────────────────────────
+%% ── SLIDE 10 – DFI 5.1 Key Features ─────────────────────────
 \begin{frame}{DFI 5.1 Key Features}
 \begin{columns}[T]
 
