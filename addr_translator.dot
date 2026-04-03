@@ -1,0 +1,143 @@
+digraph AddressTranslator {
+  graph [
+    rankdir=LR,
+    splines=ortho,
+    compound=true,
+    nodesep=0.8,
+    ranksep=2.0,
+    fontname="Helvetica",
+    fontsize=10,
+    margin=0.2,
+    concentrate=false
+  ];
+  
+  node [
+    shape=box,
+    style="rounded,filled",
+    penwidth=1.2,
+    fontname="Helvetica",
+    fontsize=10,
+    fillcolor=lightblue,
+    color=steelblue,
+    margin="0.12,0.08",
+    width=1.6,
+    height=0.8
+  ];
+  
+  edge [
+    fontname="Helvetica",
+    fontsize=9,
+    color=darkgray,
+    penwidth=1.0,
+    minlen=1.0,
+    constraint=true,
+    weight=1
+  ];
+
+  // ══════════════════════════════════════════════════════════════
+  // CONFIGURATION REGISTERS (top rank)
+  // ══════════════════════════════════════════════════════════════
+  
+  config_regs [
+    label="Config Regs\n────────────\naddr_map_mode[2:0]\ncol_bits\nrow_bits\nbank_bits",
+    fillcolor="#FFF8E1",
+    color="#F57F17",
+    width=1.5,
+    height=1.0
+  ];
+  
+  // ══════════════════════════════════════════════════════════════
+  // INPUT SIGNALS (left side)
+  // ══════════════════════════════════════════════════════════════
+  
+  input_sigs [
+    label="Input Signals\nbyte_addr[31:0]\naxid[N:0]\nbe_mask[7:0]\ntag[T:0]",
+    fillcolor="#E0F2F7",
+    color="#0277BD",
+    width=1.8,
+    height=0.9
+  ];
+  
+  // ══════════════════════════════════════════════════════════════
+  // PIPELINE STAGES (subgraph cluster)
+  // ══════════════════════════════════════════════════════════════
+  
+  subgraph cluster_pipeline {
+    style="rounded,filled";
+    color="#FF6F00";
+    fillcolor="#FFF3E0";
+    penwidth=2.0;
+    label="DDR Address Pipeline";
+    fontname="Helvetica";
+    fontsize=10;
+    fontcolor="#FF6F00";
+    labeljust=l;
+    margin=0.25;
+    
+    bit_field_extractor [
+      label="Bit Field\nExtractor\n────────\nrank\nbank_group\nbank\nrow\ncol",
+      fillcolor="#E8F5E9",
+      color="#388E3C",
+      penwidth=1.2,
+      width=1.6,
+      height=1.2
+    ];
+    
+    cmd_builder [
+      label="CMD Builder\n────────\n{rank,\nbank_group,\nbank,\nrow[15:0],\ncol[9:0],\naxid, tag,\nbe_mask}",
+      fillcolor="#F3E5F5",
+      color="#6A1B9A",
+      penwidth=1.2,
+      width=1.8,
+      height=1.3
+    ];
+  }
+  
+  // ══════════════════════════════════════════════════════════════
+  // OUTPUT COMMAND POOL (right side)
+  // ══════════════════════════════════════════════════════════════
+  
+  cmd_pool [
+    label="Read/Write\nCmd Pool",
+    fillcolor="#FFE0B2",
+    color="#E65100",
+    width=1.6,
+    height=0.8
+  ];
+  
+  // ══════════════════════════════════════════════════════════════
+  // CONNECTIONS
+  // ══════════════════════════════════════════════════════════════
+  
+  // Config input to Bit Field Extractor (from top)
+  config_regs -> bit_field_extractor [
+    color="#F57F17",
+    weight=5,
+    constraint=true,
+    minlen=1.5
+  ];
+  
+  // Main datapath (horizontal pipeline)
+  input_sigs -> bit_field_extractor [
+    color="#0277BD",
+    weight=10
+  ];
+  
+  bit_field_extractor -> cmd_builder [
+    xlabel="fields",
+    color="#388E3C",
+    weight=10
+  ];
+  
+  cmd_builder -> cmd_pool [
+    xlabel="packet",
+    color="#6A1B9A",
+    weight=10
+  ];
+  
+  // ══════════════════════════════════════════════════════════════
+  // RANK CONSTRAINTS
+  // ══════════════════════════════════════════════════════════════
+  
+  {rank=same; config_regs}
+}

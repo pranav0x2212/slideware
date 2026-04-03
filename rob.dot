@@ -1,0 +1,162 @@
+digraph ROB {
+  graph [
+    rankdir=TB,
+    splines=ortho,
+    compound=true,
+    nodesep=0.8,
+    ranksep=1.6,
+    fontname="Latin Modern Roman",
+    fontsize=10,
+    margin=0.2,
+    concentrate=false
+  ];
+  
+  node [
+    shape=box,
+    style="rounded,filled",
+    penwidth=1.2,
+    fontname="Latin Modern Roman",
+    fontsize=11,
+    fillcolor=lightblue,
+    color=steelblue,
+    margin="0.15,0.10",
+    width=1.8,
+    height=0.9
+  ];
+  
+  edge [
+    fontname="Latin Modern Roman",
+    fontsize=9.5,
+    color=darkgray,
+    penwidth=1.0,
+    minlen=2.0,
+    constraint=true,
+    weight=1
+  ];
+
+  // ══════════════════════════════════════════════════════════════
+  // TOP PIPELINE ROW (rank 0)
+  // ══════════════════════════════════════════════════════════════
+  
+  rcp [
+    label="Read Cmd Pool\n(external)",
+    fillcolor="#E0F2F7",
+    color="#0277BD"
+  ];
+  
+  seqgen [
+    label="Seq Num Generator\n(per-AXID counter)",
+    fillcolor="#E8F5E9",
+    color="#388E3C"
+  ];
+  
+  rdinst [
+    label="Tag Insertion\n(embed tag)",
+    fillcolor="#E0F2F7",
+    color="#0277BD"
+  ];
+  
+  rcp -> seqgen [xlabel="RD_CMD", color="#0277BD", weight=10];
+  seqgen -> rdinst [xlabel="{AXID,seqnum}", color="#388E3C", weight=10];
+  
+  // Tag Insertion exit to Async FIFO
+  rdinst -> fifo_point [xlabel="tagged RD_CMD", color="#0277BD", weight=1, constraint=false];
+  fifo_point [label="", shape=point, width=0, height=0];
+  
+  // ══════════════════════════════════════════════════════════════
+  // PER-AXID QUEUE MATRIX (clustered)
+  // ══════════════════════════════════════════════════════════════
+  
+  subgraph cluster_queues {
+    style="rounded,filled";
+    color="#FF6F00";
+    fillcolor="#FFF3E0";
+    penwidth=1.5;
+    label="Per-AXID Queues";
+    fontname="Latin Modern Roman";
+    fontsize=11;
+    fontcolor="#FF6F00";
+    labeljust=l;
+    margin=0.2;
+    
+    q0 [
+      label="AXID=0\nQueue\n(slots 0–3)",
+      fillcolor="#FFCCBC",
+      color="#D84315",
+      penwidth=1.2
+    ];
+    
+    q1 [
+      label="AXID=1\nQueue\n(slots 0–3)",
+      fillcolor="#FFE0B2",
+      color="#E65100",
+      penwidth=1.2
+    ];
+    
+    qn [
+      label="AXID=N\nQueue\n(slots 0–3)",
+      fillcolor="#F5F5F5",
+      color="#666666",
+      penwidth=1.2
+    ];
+  }
+  
+  // Allocation signal to Per-AXID Queues cluster boundary
+  seqgen -> q0 [xlabel="alloc {AXID,seqnum}", color="#388E3C", style=dashed, weight=8, minlen=2.0, lhead=cluster_queues];
+  
+  // ══════════════════════════════════════════════════════════════
+  // RETURN PATH (same rank for horizontal alignment)
+  // ══════════════════════════════════════════════════════════════
+  
+  dram [
+    label="Read Data Path\n(from DRAM)",
+    fillcolor="#FFF8E1",
+    color="#F57F17"
+  ];
+  
+  fill [
+    label="Tag Lookup & Fill\n(decode & fill)",
+    fillcolor="#F3E5F5",
+    color="#6A1B9A"
+  ];
+  
+  // DRAM feeds Fill
+  dram -> fill [xlabel="{tag,data}", color="#F57F17", weight=1, minlen=3.0];
+  
+  // Fill write-back to Per-AXID Queues cluster boundary
+  fill -> q0 [xlabel="write\n{AXID,seqnum,data,valid=1}", color="#6A1B9A", style=dashed, weight=8, minlen=2.0, lhead=cluster_queues];
+  
+  // ══════════════════════════════════════════════════════════════
+  // RETIREMENT PATH
+  // ══════════════════════════════════════════════════════════════
+  
+  retire [
+    label="Retirement Logic\n(per-AXID HEAD)",
+    fillcolor="#CFD8DC",
+    color="#455A64"
+  ];
+  
+  axiport [
+    label="AXI Read Port\n(external)",
+    fillcolor="#E0F2F7",
+    color="#0277BD"
+  ];
+  
+  // Queues to Retirement (using ltail to anchor from cluster)
+  q1 -> retire [xlabel="queue[AXID][HEAD].\n{valid,data}", color="#455A64", weight=5, ltail=cluster_queues];
+  
+  // Fill to Retirement  
+  fill -> retire [xlabel="decoded\naddr", color="#6A1B9A", minlen=2.0, weight=10];
+  
+  // Retire to AXI output
+  retire -> axiport [xlabel="in-order", color="#455A64", minlen=2.0, weight=10];
+  
+  // ══════════════════════════════════════════════════════════════
+  // RANK CONSTRAINTS for explicit alignment
+  // ══════════════════════════════════════════════════════════════
+  
+  {rank=same; rcp; seqgen; rdinst}
+  {rank=same; fill; dram}
+  {rank=same; retire; axiport}
+}
+

@@ -1,7 +1,7 @@
 \documentclass[10pt]{article}
 \usepackage[a3paper, margin=2.0cm, top=2.2cm, bottom=2.0cm]{geometry}
 \usepackage{tikz}
-\usetikzlibrary{arrows.meta, fit, backgrounds, calc}
+\usetikzlibrary{arrows.meta, fit, backgrounds, calc, positioning, matrix}
 \usepackage[T1]{fontenc}
 \usepackage{xcolor}
 \usepackage{titlesec}
@@ -48,18 +48,28 @@
   sarr/.style={-{Stealth[length=4pt,width=3pt]}, line width=0.85pt, color=#1},
 }
 
-\titleformat{\section}{\normalsize\bfseries\color{NavyD}}{\thesection}{0.5em}{}
-  [\vspace{-3pt}\textcolor{MGRAY}{\rule{\linewidth}{0.3pt}}]
-\titleformat{\subsection}{\small\bfseries\color{DfiD}}{\thesubsection}{0.5em}{}
+\titleformat{\section}{\normalsize\bfseries\color{NavyD}}{\thesection\enspace}{0em}{\raggedright}
+  [\vspace{-2pt}\textcolor{MGRAY}{\rule{\linewidth}{0.3pt}}]
+\titlespacing{\section}{0pt}{12pt plus 2pt minus 1pt}{8pt plus 1pt minus 0.5pt}
+
+\titleformat{\subsection}{\small\bfseries\color{DfiD}}{\thesubsection\enspace}{0em}{}
+\titlespacing{\subsection}{0pt}{10pt plus 1pt minus 0.5pt}{6pt plus 0.5pt}
 
 \pagestyle{fancy}\fancyhf{}
 \renewcommand{\headrulewidth}{0.3pt}
-\fancyhead[L]{\scriptsize\color{MGRAY}Reconfigurable DDR Memory Controller}
-\fancyhead[R]{\scriptsize\color{MGRAY}Microarchitecture Specification}
-\fancyfoot[C]{\scriptsize\thepage}
+\renewcommand{\sectionmark}[1]{}
+\renewcommand{\subsectionmark}[1]{}
+\fancyhead[L]{\scriptsize\color{MGRAY}DDR Memory Controller}
+\fancyhead[R]{\scriptsize\color{MGRAY}\thepage}
+\fancyfoot[C]{}
 
 \captionsetup{font=scriptsize, labelfont=bf, skip=4pt}
 \hypersetup{colorlinks, linkcolor=NavyD, urlcolor=NavyD}
+
+% Float spacing optimization for common figure placement issues
+\setlength{\textfloatsep}{12pt}
+\setlength{\floatsep}{8pt}
+\setlength{\intextsep}{10pt}
 
 \begin{document}
 
@@ -302,32 +312,17 @@ forwards it back to the Client Interface (CIF). All PHY commands are issued over
 \textcolor{DrmD}{\textbf{Amber}}: DRAM Domain.
 The CDC bar is the sole crossing point between the two clock domains.}
 
-\newpage
-\thispagestyle{fancy}
-\raggedright\small
+\section{Burst Splitter}
 
-{\normalsize\bfseries\color{NavyD} 6\enspace Burst Splitter}\par\vspace{4pt}
+The Burst Splitter sits between the AXI port and the Address Translator. Its job is to take an incoming AXI burst and break it down into memory commands the DRAM scheduler can directly consume. This happens in two stages.
 
-The Burst Splitter sits between the AXI port and the Address Translator.
-Its job is to take an incoming AXI burst and break it down into memory commands
-the DRAM scheduler can directly consume. This happens in two stages.
+Stage 1 checks whether the burst crosses a DRAM row (page) boundary, determined by the address mapping in the config registers. If it does, the burst is split into sub-transactions each confined to a single row. If not, it passes straight through to Stage 2.
 
-Stage~1 checks whether the burst crosses a DRAM row (page) boundary, determined
-by the address mapping in the config registers. If it does, the burst is split
-into sub-transactions each confined to a single row. If not, it passes straight
-through to Stage~2.
+Stage 2 checks whether each sub-transaction fits within a single memory command, taking into account the configured burst length and start column address alignment. If not, it gets chopped into multiple memory commands. The output goes into the command pool as \texttt{WR\_CMD} or \texttt{RD\_CMD} packets.
 
-Stage~2 checks whether each sub-transaction fits within a single memory command,
-taking into account the configured burst length and start column address alignment.
-If not, it gets chopped into multiple memory commands. The output goes into the
-command pool as \texttt{WR\_CMD} or \texttt{RD\_CMD} packets.
+Both stages support compile-time enable/disable. When Stage 1 is disabled, incoming AXI bursts must not cross a page boundary. When Stage 2 is disabled, each transaction must already be sized to fit within a single memory command.
 
-Both stages support compile-time enable/disable. When Stage~1 is disabled,
-incoming AXI bursts must not cross a page boundary. When Stage~2 is disabled,
-each transaction must already be sized to fit within a single memory command.
-
-\vspace{8pt}
-{\small\bfseries\color{DfiD} 6.1\enspace AXI Feature Decisions}\par\vspace{4pt}
+\noindent\textbf{\color{DfiD}AXI Feature Decisions}\par\vspace{6pt}
 
 \begin{tabular}{p{4.0cm} p{3.5cm} p{11cm}}
 \toprule
@@ -343,8 +338,7 @@ QoS signals         & Not supported      & Scheduler complexity not justified at
 \bottomrule
 \end{tabular}
 
-\vspace{10pt}
-{\small\bfseries\color{DfiD} 6.2\enspace Internal Pipeline}\par\vspace{4pt}
+\noindent\textbf{\color{DfiD}Internal Pipeline}\par\vspace{6pt}
 
 \definecolor{TealFill}    {HTML}{E1F5EE}
 \definecolor{TealStroke}  {HTML}{0F6E56}
@@ -380,7 +374,7 @@ QoS signals         & Not supported      & Scheduler complexity not justified at
 }
 
 \setcounter{figure}{2}
-\begin{figure}[H]
+\begin{figure}[!ht]
 \centering
 \begin{tikzpicture}
 
@@ -450,6 +444,111 @@ boundaries into linear transactions each confined to a single row. Stage~2 divid
 each into memory commands sized to the configured burst length and aligned to the
 start column address. Both stages are individually enabled or disabled at compile time.}
 \label{fig:burst-splitter}
+\end{figure}
+
+\noindent\textbf{\color{DfiD}Address Calculation}\par\vspace{6pt}
+
+All address arithmetic is performed in byte units on the AXI byte address before it is handed to the Address Translator. The two key quantities computed per sub-transaction are the row-boundary address used by Stage 1 and the column-aligned start address used by Stage 2.
+
+Stage 1 — row boundary detection. The active address-mapping mode read from the config registers determines the row-address width $R$ and the column-address width $C$. The column-address width $C$ defines how many addressable column locations exist per row, so the total number of bytes in one DRAM row is:
+\[
+  \textit{ROW\_BYTES} = 2^{C} \times \textit{BUS\_WIDTH\_BYTES}
+\]
+where \texttt{BUS\_WIDTH\_BYTES} is 8 for the 64-bit data bus. The byte address of the row boundary immediately above a transaction starting at byte address $A$ is:
+\[
+  A_{\text{row\_end}} = \bigl(\lfloor A / \textit{ROW\_BYTES} \rfloor + 1\bigr)
+                        \times \textit{ROW\_BYTES}
+\]
+The burst crosses a row boundary if and only if $A + \textit{LEN\_BYTES} > A_{\text{row\_end}}$, where $\textit{LEN\_BYTES} = (\texttt{ARLEN} + 1) \times \texttt{BUS\_WIDTH\_BYTES}$. When a split is required, the first sub-transaction runs from $A$ to $A_{\text{row\_end}}$ minus 1. Subsequent sub-transactions start at successive row boundaries, each of length $\textit{ROW\_BYTES}$, except the final sub-transaction which covers the remaining bytes.
+
+Stage 2 — burst-length alignment. The configured memory burst length $\textit{BL}$ sets the atomic transfer granule. For DDR4 BL8 for example, the number of bytes per memory command is:
+\[
+  \textit{CMD\_BYTES} = \textit{BL} \times \textit{BUS\_WIDTH\_BYTES}
+\]
+The column-aligned start address of a sub-transaction at byte address $A'$ is:
+\[
+  A'_{\text{aligned}} = \lfloor A' / \textit{CMD\_BYTES} \rfloor
+                        \times \textit{CMD\_BYTES}
+\]
+If $A'$ is not already aligned, meaning $A' \bmod \textit{CMD\_BYTES}$ is not zero, the first memory command covers the partial beat from $A'$ to the next aligned boundary. The byte-enable mask \texttt{BE} is set only for the active lanes in this first command. Each subsequent command is naturally aligned and carries a full-width \texttt{BE}\,=\,\texttt{0xFF}. The total number of memory commands issued for a sub-transaction of $N_{\text{bytes}}$ bytes starting at $A'$ is:
+\[
+  N_{\text{cmds}} =
+    \left\lceil \frac{(A' \bmod \textit{CMD\_BYTES}) + N_{\text{bytes}}}
+                     {\textit{CMD\_BYTES}} \right\rceil
+\]
+Each emitted \texttt{RD\_CMD}/\texttt{WR\_CMD} packet carries $\{$\texttt{rank, bank, row, col}$\}$ derived by the Address Translator from $A'_{\text{aligned}}$, plus the byte-enable mask and the transaction tag.
+
+\section{Reorder Buffer (ROB)}
+
+The Reorder Buffer restores AXI read-response order after DRAM-domain reordering. It operates entirely within the client clock domain; the Async FIFO CDC boundary is upstream of it.
+
+The DRAM scheduler reorders read commands across AXI IDs to maximise row-hit rate. AXI4 requires that responses to the same AXID are returned in issue order, but places no ordering constraint across different AXIDs. A naive single-queue ROB would stall all AXIDs whenever one AXID's data is delayed, which eliminates the scheduling benefit entirely.
+
+The ROB solves this using a composite tag $\{$AXID, seqnum$\}$. Each AXID has a dedicated counter that increments strictly with every issued read command. This seqnum, combined with the AXID, forms a globally unique tag for every in-flight request. The tag is embedded into the \texttt{RD\_CMD} by the Tag Insertion block. The tagged command then exits the ROB and crosses the Async FIFO CDC boundary into the DRAM domain.
+
+On the return path, data arrives back from the DRAM domain as $\{$tag, data$\}$ pairs. The Tag Lookup and Fill block decodes the tag to recover the AXID and seqnum, writes the data into the correct slot in \texttt{queue[AXID][seqnum]}, and sets the slot valid bit. This write is non-blocking, meaning it does not wait for earlier slots of the same AXID to be filled first.
+
+Retirement Logic maintains a per-AXID HEAD pointer, initialised to seqnum 0. Each cycle, if the slot at HEAD is valid, it is retired: the data is forwarded to the AXI Read Port with the correct \texttt{RID} and the HEAD pointer advances to the next seqnum. Each AXID retires independently, so a stalled AXID never blocks another.
+
+The following table summarizes the key correctness properties of the ROB design:
+
+\begin{tabular}{p{4.2cm} p{13.5cm}}
+\toprule
+\textbf{Property} & \textbf{Guarantee} \\
+\midrule
+Same-AXID ordering & Responses retire in strict seqnum order (HEAD advances
+                     only when the next slot is valid). \\[3pt]
+Cross-AXID isolation & Per-AXID queues and HEAD pointers are independent;
+                       no AXID can block another. \\[3pt]
+Tag uniqueness & $\{$AXID,\,seqnum$\}$ is globally unique for all in-flight
+                 commands because seqnum is per-AXID and strictly increasing. \\[3pt]
+No Async FIFO inside ROB & The CDC boundary sits outside the ROB. The ROB
+                           operates on a single (client) clock, simplifying
+                           timing closure. \\
+\bottomrule
+\end{tabular}
+
+Figure~\ref{fig:rob_arch} below shows the complete internal architecture of the ROB.
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.9\linewidth]{rob.pdf}
+\caption{Internal architecture of the Reorder Buffer (ROB). The ROB reconstructs AXI read responses from potentially out-of-order DRAM returns while preserving per-AXID ordering.}
+\label{fig:rob_arch}
+\end{figure}
+
+\section{Address Translator}
+
+The Address Translator converts a byte address from the Burst Splitter into the physical DRAM address tuple required by the memory controller. It extracts rank, bank group, bank, row, and column fields from the byte address using a configurable bit-field mapping stored in the Config Registers.
+
+The Bit Field Extractor takes the input byte address and slices it into DRAM address fields based on the configured \texttt{addr\_map\_mode} and the programmed bit widths for each field. The bit boundaries are fully register-programmable, which allows the same RTL to correctly map addresses for DDR3, DDR4, DDR5, and LPDDR4 without any RTL changes. For example, DDR3 has no bank group field, while DDR4 introduces two bank group bits at a different position in the address.
+
+The CMD Builder takes the extracted fields along with the AXI metadata (\texttt{AXID, tag, byte-enable mask}) passed through from the input and packs them into a complete \texttt{RD\_CMD} or \texttt{WR\_CMD} packet. This packet is then forwarded to the Read or Write Command Pool, where it awaits transmission to the DRAM domain.
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.85\linewidth]{addr_translator.pdf}
+\caption{Address Translator pipeline. The Bit Field Extractor decodes the byte address into DRAM fields according to the configured memory map; the CMD Builder packs extracted fields with AXI metadata to form the final command packet.}
+\label{fig:addr_translator}
+\end{figure}
+
+\section{Merge Logic}
+
+The Merge Logic reassembles fragments from split DRAM read transactions into complete burst responses before passing them to the Reorder Buffer. When the Burst Splitter divides a single AXI read into multiple sub-commands due to row boundary crossings or burst length constraints, each sub-command is issued independently to the DRAM domain and may return out of order due to DRAM scheduling. Merge Logic is responsible for collecting all fragments belonging to the same original transaction and concatenating them in the correct order.
+
+The Tag Decoder is the first stage. It receives each returning $\{$tag, data$\}$ beat from the Read Data Path and extracts the original transaction metadata from the tag field, specifically the \texttt{AXID}, original command ID, fragment index, and total fragment count.
+
+The Fragment Buffer stores each arriving data beat at the address \texttt{[axid][frag\_idx]}. Each slot holds the data word and a valid bit. Fragments can be written in any order since the \texttt{frag\_idx} field in the tag directly identifies the correct storage location.
+
+The Reassembly Tracker maintains two counters per AXID: \texttt{frag\_count} tracks how many fragments have arrived, and \texttt{expected} holds the total number of fragments for the transaction, latched from \texttt{frag\_total} when the first fragment arrives. When \texttt{frag\_count} equals \texttt{expected}, the tracker asserts \texttt{burst\_complete} for that AXID.
+
+The Output Mux reads all stored fragments for the completed transaction in \texttt{frag\_idx} order from 0 to \texttt{frag\_total} minus 1, concatenates them into a single data burst, and forwards the result to the ROB. For single-fragment transactions where \texttt{frag\_total} equals 1, the data bypasses the Fragment Buffer entirely and passes directly to the Output Mux without any buffering.
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.90\linewidth]{merge_logic.pdf}
+\caption{Merge Logic pipeline. The Tag Decoder extracts metadata from returning data; fragments are buffered and tracked for completion; the Output Mux concatenates reassembled bursts in the correct order.}
+\label{fig:merge_logic}
 \end{figure}
 
 \end{document}
