@@ -1,2 +1,2 @@
 # slideware
-All Capstone slides 
+All Capstone docs scattered into the abyss
