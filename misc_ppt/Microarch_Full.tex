@@ -1,0 +1,554 @@
+\documentclass[10pt]{article}
+\usepackage[a3paper, margin=2.0cm, top=2.2cm, bottom=2.0cm]{geometry}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, fit, backgrounds, calc, positioning, matrix}
+\usepackage[T1]{fontenc}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{parskip}
+\usepackage{caption}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{booktabs}
+
+\definecolor{NavyD}{HTML}{0D1B2A}
+\definecolor{CliD} {HTML}{1A6060}
+\definecolor{CliF} {HTML}{D4EEEE}
+\definecolor{MCD}  {HTML}{2C3E7A}
+\definecolor{MCF}  {HTML}{DDE3F5}
+\definecolor{DrmD} {HTML}{7A4010}
+\definecolor{DrmF} {HTML}{FAE8D4}
+\definecolor{IfcD} {HTML}{5B2080}
+\definecolor{IfcF} {HTML}{EEE0FA}
+\definecolor{DfiD} {HTML}{0D1F3C}
+\definecolor{MGRAY}{HTML}{999999}
+\definecolor{ddrblue} {HTML}{1A5276}
+\definecolor{ddrgreen}{HTML}{1A7A4A}
+\definecolor{ddrteal} {HTML}{0E7070}
+
+\tikzset{
+  BLK/.style args={#1/#2}{
+    rectangle, rounded corners=5pt,
+    draw=#1, fill=#2, text=#1,
+    font=\small\bfseries, align=center,
+    inner sep=6pt, minimum width=2.6cm, minimum height=1.0cm,
+    line width=0.9pt
+  },
+  RGN/.style={draw=#1, fill=#1!5, rounded corners=8pt, dashed, line width=1.1pt},
+  ARR/.style={-{Stealth[length=5pt,width=4pt]}, line width=1.0pt, color=#1},
+  sbox/.style={rectangle, rounded corners=4pt, draw=#1, fill=#1!15, text=#1,
+    font=\small\bfseries, align=center, inner sep=5pt, line width=0.9pt},
+  ddrbox/.style={rectangle, rounded corners=3pt, draw=#1, fill=#1!20, text=#1,
+    font=\scriptsize\bfseries, align=center, inner sep=4pt,
+    minimum width=1.6cm, minimum height=0.5cm, line width=0.8pt},
+  sarr/.style={-{Stealth[length=4pt,width=3pt]}, line width=0.85pt, color=#1},
+}
+
+\titleformat{\section}{\normalsize\bfseries\color{NavyD}}{\thesection\enspace}{0em}{\raggedright}
+  [\vspace{-2pt}\textcolor{MGRAY}{\rule{\linewidth}{0.3pt}}]
+\titlespacing{\section}{0pt}{12pt plus 2pt minus 1pt}{8pt plus 1pt minus 0.5pt}
+
+\titleformat{\subsection}{\small\bfseries\color{DfiD}}{\thesubsection\enspace}{0em}{}
+\titlespacing{\subsection}{0pt}{10pt plus 1pt minus 0.5pt}{6pt plus 0.5pt}
+
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0.3pt}
+\renewcommand{\sectionmark}[1]{}
+\renewcommand{\subsectionmark}[1]{}
+\fancyhead[L]{\scriptsize\color{MGRAY}DDR Memory Controller}
+\fancyhead[R]{\scriptsize\color{MGRAY}\thepage}
+\fancyfoot[C]{}
+
+\captionsetup{font=scriptsize, labelfont=bf, skip=4pt}
+\hypersetup{colorlinks, linkcolor=NavyD, urlcolor=NavyD}
+
+% Float spacing optimization for common figure placement issues
+\setlength{\textfloatsep}{12pt}
+\setlength{\floatsep}{8pt}
+\setlength{\intextsep}{10pt}
+
+\begin{document}
+
+\begin{center}
+  {\Large\bfseries\color{NavyD} Reconfigurable Universal DDR Memory Controller}\\[4pt]
+  {\normalsize\color{MGRAY} Microarchitecture Specification}\\[2pt]
+  {\small\color{MGRAY} DDR / DDR2 / DDR3 / DDR4 / DDR5 \quad LPDDR / LPDDR2 / LPDDR3 / LPDDR4
+  \quad AXI4 Host Interface \quad DFI PHY Interface}
+\end{center}
+\vspace{4pt}\textcolor{MGRAY}{\rule{\linewidth}{0.4pt}}\vspace{8pt}
+
+\section{Overview}
+
+The Reconfigurable Memory Controller (RMC) is a universal DDR
+controller designed to interface with all major generations of DDR
+and LPDDR SDRAM, spanning DDR through DDR5 and LPDDR through
+LPDDR4, without changing the RTL. Protocol-specific behaviour
+such as timing parameters and initialization sequences are loaded from a software-programmable
+configuration register file at boot time.
+
+The RMC sits between an AXI4 system interconnect and a standard
+PHY interface. On the host side it accepts AXI4 burst transactions;
+on the memory side it drives a DFI-compliant PHY that handles the
+actual IO.
+
+\section{System Architecture}
+
+Figure~\ref{fig:sys} shows where the RMC sits in the full memory
+subsystem. One or more AXI masters connect through a system
+interconnect to the MC over AXI or CHI. The MC is the sole block
+responsible for all DRAM protocol logic, translating host
+transactions into correctly-timed DDR command sequences and
+returning read data in order.
+
+The MC drives a universal PHY over a standard PHY interface. The
+PHY handles IO calibration, timing alignment, and differential
+signaling, and fans out to whichever DDR or LPDDR generation is
+physically present on the board. The scope of this document is
+the MC block only.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[x=1cm, y=1cm, scale=0.78, every node/.style={transform shape}]
+  \node[sbox=ddrblue, minimum width=1.4cm, minimum height=1.2cm] (m0) at (0, 0.9) {AXI\\M0};
+  \node[sbox=ddrblue, minimum width=1.4cm, minimum height=1.2cm] (m1) at (0,-0.9) {AXI\\M1};
+  \node[sbox=ddrgreen, minimum width=1.6cm, minimum height=2.8cm] (ic) at (2.2, 0) {Inter\\connect};
+  \node[sbox=ddrblue, minimum width=1.8cm, minimum height=2.8cm] (mc) at (4.6, 0) {MC};
+  \node[sbox=ddrteal, minimum width=1.8cm, minimum height=2.5cm,
+        text=white, draw=ddrteal!80!black] (phy) at (7.0, 0) {DDR\\PHY};
+  \foreach \lbl/\y/\col in {
+      LPDDR3/2.45/ddrteal, LPDDR2/1.75/ddrteal, LPDDR/1.05/ddrteal,
+      DDR/0.35/ddrblue, DDR2/-0.35/ddrblue, DDR3/-1.05/ddrblue,
+      DDR4/-1.75/ddrblue, DDR5/-2.45/ddrblue}{
+    \node[ddrbox=\col, minimum width=1.5cm, minimum height=0.46cm] (\lbl) at (9.0, \y) {\lbl};}
+  \draw[sarr=ddrblue] (m0.east) -- node[above,font=\tiny]{AXI} (m0.east -| ic.west);
+  \draw[sarr=ddrblue] (m1.east) -- node[below,font=\tiny]{AXI} (m1.east -| ic.west);
+  \draw[sarr=ddrblue, <->] (ic.east) -- node[above,font=\tiny]{AXI/CHI} (mc.west);
+  \draw[sarr=ddrteal,  <->] (mc.east) -- node[above,font=\tiny,text=ddrteal]{PHY IF} (phy.west);
+  \draw[ddrblue, line width=0.8pt] (phy.east) -- ++(0.35,0) |- ($(LPDDR3.west)+(-0.35,0)$);
+  \draw[ddrblue, line width=0.8pt] ($(phy.east)+(0.35,0)$) |- ($(DDR5.west)+(-0.35,0)$);
+  \foreach \lbl in {LPDDR3,LPDDR2,LPDDR,DDR,DDR2,DDR3,DDR4,DDR5}{
+    \draw[sarr=ddrblue] ($({\lbl}.west)+(-0.35,0)$) -- (\lbl.west);}
+\end{tikzpicture}
+\caption{System-level block diagram. The RMC (MC block) is the scope of this document.}
+\label{fig:sys}
+\end{figure}
+
+\section{Client Interface (CIF)}
+
+The Client Interface (CIF) terminates the AXI4 subordinate port and converts burst transactions
+into a stream of normalized read and write commands. It has no knowledge of DRAM timing,
+bank state, or refresh.
+
+\subsection{Write Path}
+An incoming AXI write burst is first split by the \textbf{Burst Splitter} if it crosses
+a row or bank boundary. The \textbf{Address Translator} maps the AXI byte address to a
+$\{\text{rank, bank, row, column}\}$ tuple using the mapping scheme in the register file.
+The descriptor and its data are queued in the \textbf{Write Command Pool}.
+
+\subsection{Read Path}
+The read path mirrors the write path. Descriptors from the \textbf{Read Command Pool}
+carry a transaction tag that the DRAM domain attaches to returning data. Completed data
+passes through \textbf{Merge Logic}, which reassembles split bursts, and into the
+\textbf{Reorder Buffer}, which retires responses in AXI-ID order back to the master.
+
+\section{MC Core}
+
+The MC Core owns the clock domain crossing. The \textbf{Async FIFO} bridges the AXI
+clock (client side) and the controller clock (DRAM side), running at half the DDR data
+rate. Commands cross as normalized \texttt{WR\_CMD} or \texttt{RD\_CMD} packets carrying
+address, data, byte-enable mask, and transaction tag.
+
+The \textbf{Config Registers} hold all runtime-programmable parameters: timing values,
+address mapping mode, page policy, and protocol selection. The \textbf{Init FSM} steps
+through the protocol-specific power-up sequence on reset, reading its command sequence
+and inter-command delays from the register file, making the same FSM correct for every
+supported DDR generation.
+
+\section{DRAM Domain}
+
+The DRAM Domain accepts commands from the internal interface and is solely responsible
+for all DRAM protocol correctness.
+
+\subsection{Scheduling Engines}
+Three engines feed the central scheduler. The \textbf{Bank State Machines} track each
+physical bank through Idle, Activating, Active, and Precharging states. \textbf{Timing
+Control} maintains per-bank countdown timers for all JEDEC constraints ($t_{RCD}$,
+$t_{RAS}$, $t_{RP}$, $t_{RFC}$, $t_{FAW}$, $t_{WTR}$, and others from the register
+file) and presents an eligibility mask each cycle. The \textbf{Maintenance Engine}
+handles auto-refresh, ZQ calibration, power-down entry/exit, and the post-init ready
+signal.
+
+\subsection{DDR Command Scheduler}
+The scheduler selects one legal command per cycle. Priority: maintenance first (refresh
+deadlines preempt everything), then row-hit reads, row-hit writes, row-miss reads, and
+row-miss writes. Open-page vs.\ close-page policy is configurable per rank.
+
+\subsection{Data Paths and DFI}
+The \textbf{Write Data Path} serializes write data onto the DFI bus with correct
+write-latency alignment and drives byte-mask signals. The \textbf{Read Data Path}
+captures returning DFI data, associates it with the pending transaction tag, and
+forwards it back to the Client Interface (CIF). All PHY commands are issued over the
+\textbf{DFI Interface}; the RMC never drives DRAM pins directly.
+
+\noindent The complete microarchitecture block diagram is on the following page.
+
+%--- PAGE 2: MICROARCH DIAGRAM ---
+\newpage
+\thispagestyle{fancy}
+
+\begin{center}
+{\large\bfseries\color{NavyD} Microarchitecture Block Diagram}\\[6pt]
+\end{center}
+
+\definecolor{AW}{HTML}{1A6060}
+\definecolor{AR}{HTML}{8B4500}
+\definecolor{AI}{HTML}{5B2080}
+\definecolor{AG}{HTML}{444444}
+
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,scale=0.65,every node/.style={transform shape}]
+
+\node[BLK=CliD/CliF] (awp)  at (-1.7, 3.5) {AXI Write\\Port};
+\node[BLK=CliD/CliF] (bsW)  at ( 1.7, 3.5) {Burst\\Splitter};
+\node[BLK=CliD/CliF] (adW)  at ( 5.1, 3.5) {Address\\Translator};
+\node[BLK=CliD/CliF] (wcpl) at ( 8.5, 3.5) {Write Cmd\\Pool};
+\node[BLK=CliD/CliF] (arp)  at (-1.7,-3.5) {AXI Read\\Port};
+\node[BLK=CliD/CliF] (bsR)  at ( 1.7,-3.5) {Burst\\Splitter};
+\node[BLK=CliD/CliF] (adR)  at ( 5.1,-3.5) {Address\\Translator};
+\node[BLK=CliD/CliF] (rcpl) at ( 8.5,-3.5) {Read Cmd\\Pool};
+\node[BLK=CliD/CliF] (rrb)  at ( 5.1, 0.0) {Reorder\\Buffer};
+\node[BLK=CliD/CliF] (mlg)  at ( 1.7, 0.0) {Merge\\Logic};
+
+\node[BLK=IfcD/IfcF,
+      minimum width=1.6cm,minimum height=9.2cm,text width=1.3cm]
+  (cdc) at (12.2,0)
+  {\rotatebox{90}{Async FIFO (CDC)\enspace|\enspace
+    \texttt{WR\_CMD / RD\_CMD}+addr+data+tag}};
+
+\node[BLK=MCD/MCF] (cfg)  at (15.6, 1.6) {Config\\Registers};
+\node[BLK=MCD/MCF] (init) at (15.6,-1.6) {Init FSM};
+
+\node[BLK=DrmD/DrmF] (bfsm)  at (20.1, 3.0) {Bank State\\Machines};
+\node[BLK=DrmD/DrmF] (tctl)  at (20.1, 0.0) {Timing\\Control};
+\node[BLK=DrmD/DrmF] (maint) at (20.1,-3.0) {Maintenance\\Engine};
+
+\node[BLK=DrmD/DrmF,
+      minimum width=3cm,minimum height=9.2cm]
+  (sched) at (24.3,0) {DDR\\Command\\Scheduler};
+
+\node[BLK=DrmD/DrmF] (wdp) at (28.1, 2.0) {Write\\Data Path};
+\node[BLK=DrmD/DrmF] (rdp) at (28.1,-2.0) {Read\\Data Path};
+
+\node[BLK=DfiD/DfiD,
+      minimum width=1.6cm,minimum height=9.2cm,
+      text=white,text width=1.3cm]
+  (dfi) at (31.7,0)
+  {\rotatebox{90}{\bfseries DFI Interface}};
+
+\begin{scope}[on background layer]
+  \node[RGN=CliD,fit=(awp)(bsW)(adW)(wcpl)(arp)(bsR)(adR)(rcpl)(rrb)(mlg),inner sep=14pt] (crgn) {};
+  \node[RGN=MCD, fit=(cdc)(cfg)(init),inner sep=14pt] (mrgn) {};
+  \node[RGN=DrmD,fit=(bfsm)(tctl)(maint)(sched)(wdp)(rdp)(dfi),inner sep=14pt] (drgn) {};
+\end{scope}
+
+\node[font=\large\bfseries,color=CliD,above=8pt] at (crgn.north) {Client Interface (CIF)};
+\node[font=\large\bfseries,color=MCD, above=8pt] at (mrgn.north) {MC Core};
+\node[font=\large\bfseries,color=DrmD,above=8pt] at (drgn.north) {DRAM Domain};
+
+\draw[ARR=AW,line width=1.3pt] (-3.2, 3.5)--(awp.west);
+\draw[ARR=AR,line width=1.3pt] (-3.2,-3.5)--(arp.west);
+\node[left,font=\normalsize\bfseries,color=AW] at (-3.2, 3.5) {AXI};
+\node[left,font=\normalsize\bfseries,color=AR] at (-3.2,-3.5) {AXI};
+
+\draw[ARR=AW] (awp.east)--(bsW.west);
+\draw[ARR=AW] (bsW.east)--(adW.west);
+\draw[ARR=AW] (adW.east)--(wcpl.west);
+\draw[ARR=AR] (arp.east)--(bsR.west);
+\draw[ARR=AR] (bsR.east)--(adR.west);
+\draw[ARR=AR] (adR.east)--(rcpl.west);
+
+\draw[ARR=AI] (wcpl.east)--(cdc.west|-wcpl.east);
+\draw[ARR=AI] (rcpl.east)--(cdc.west|-rcpl.east);
+\draw[ARR=AI] (cdc.east|-cfg)--(cfg.west);
+\draw[ARR=AI] (cdc.east|-init)--(init.west);
+\draw[ARR=AI,line width=1.4pt]
+  (cdc.east|-tctl)--++(1,0)--++(0,0.8)--(sched.west|-{(0,0.8)});
+
+\draw[ARR=AG,dashed,line width=0.75pt] (cfg.east)--(tctl.west);
+\draw[ARR=AG,dashed,line width=0.75pt] (init.east)--(maint.west);
+
+\draw[ARR=AG] (bfsm.east)--++(0.8,0)|-(sched.west|-bfsm.south);
+\draw[ARR=AG] (tctl.east)--(sched.west);
+\draw[ARR=AG] (maint.east)--++(0.8,0)|-(sched.west|-maint.north);
+
+\draw[ARR=AW] (sched.east|-wdp)--(wdp.west);
+\draw[ARR=AR] (sched.east|-rdp)--(rdp.west);
+
+\draw[ARR=AW] (wdp.east)--++(0.8,0)|-(dfi.west|-wdp.north);
+\node[above,font=\small\bfseries,color=AW] at ($(wdp.east)!0.5!(dfi.west)$){write};
+\draw[ARR=AR] (dfi.west|-rdp.center)--(rdp.east);
+\node[below,font=\small\bfseries,color=AR] at ($(dfi.west)!0.5!(rdp.east)$){read};
+
+\draw[ARR=AR]
+  (rdp.south) -- (rdp.south |- 0,-5.6)
+  -- (rrb.south |- 0,-5.6) -- (rrb.south);
+\draw[ARR=AR] (rrb.west)--(mlg.east);
+\draw[ARR=AR] (mlg.west) -- ++(-4.0,0) -- ++(0,-3.5) -- (arp.west);
+
+\draw[ARR=AG,line width=1.5pt]
+  (dfi.east)--++(1,0)
+  node[right,font=\normalsize\bfseries,color=DfiD]{DDR PHY};
+
+\end{tikzpicture}
+
+\vspace{8pt}
+{\small\textbf{Figure 2:} Full microarchitecture block diagram of the RMC.
+\textcolor{CliD}{\textbf{Teal}}: Client Interface (CIF);
+\textcolor{MCD}{\textbf{Blue}}: MC Core;
+\textcolor{DrmD}{\textbf{Amber}}: DRAM Domain.
+The CDC bar is the sole crossing point between the two clock domains.}
+
+\section{Burst Splitter}
+
+The Burst Splitter sits between the AXI port and the Address Translator. Its job is to take an incoming AXI burst and break it down into memory commands the DRAM scheduler can directly consume. This happens in two stages.
+
+Stage 1 checks whether the burst crosses a DRAM row (page) boundary, determined by the address mapping in the config registers. If it does, the burst is split into sub-transactions each confined to a single row. If not, it passes straight through to Stage 2.
+
+Stage 2 checks whether each sub-transaction fits within a single memory command, taking into account the configured burst length and start column address alignment. If not, it gets chopped into multiple memory commands. The output goes into the command pool as \texttt{WR\_CMD} or \texttt{RD\_CMD} packets.
+
+Both stages support compile-time enable/disable. When Stage 1 is disabled, incoming AXI bursts must not cross a page boundary. When Stage 2 is disabled, each transaction must already be sized to fit within a single memory command.
+
+\noindent\textbf{\color{DfiD}AXI Feature Decisions}\par\vspace{6pt}
+
+\begin{tabular}{p{4.0cm} p{3.5cm} p{11cm}}
+\toprule
+\textbf{Feature} & \textbf{Decision} & \textbf{Rationale} \\
+\midrule
+Burst type          & INCR only          & Covers all standard memory traffic. WRAP adds splitter complexity with little benefit. FIXED is not useful for DRAM access. \\[3pt]
+Data bus width      & 64-bit             & Sufficient for target DDR generations. Can be widened via config registers if needed. \\[3pt]
+Outstanding IDs     & Multiple supported & Needed to hide DRAM latency. The Reorder Buffer handles out-of-order returns and retires responses in AXI-ID order. \\[3pt]
+Narrow transfers    & Not supported      & Adds byte-lane steering complexity. All transfers assumed to use the full bus width. \\[3pt]
+Unaligned transfers & Not supported      & High cost, low practical gain. AXI masters are expected to issue aligned bursts. \\[3pt]
+Exclusive access    & Not supported      & Requires a reservation table. Out of scope for this design phase. \\[3pt]
+QoS signals         & Not supported      & Scheduler complexity not justified at this stage. \\
+\bottomrule
+\end{tabular}
+
+\noindent\textbf{\color{DfiD}Internal Pipeline}\par\vspace{6pt}
+
+\definecolor{TealFill}    {HTML}{E1F5EE}
+\definecolor{TealStroke}  {HTML}{0F6E56}
+\definecolor{PurpleFill}  {HTML}{EEEDFE}
+\definecolor{PurpleStroke}{HTML}{534AB7}
+\definecolor{BlueFill}    {HTML}{E6F1FB}
+\definecolor{BlueStroke}  {HTML}{185FA5}
+\definecolor{AmberFill}   {HTML}{FAEEDA}
+\definecolor{AmberStroke} {HTML}{854F0B}
+\definecolor{GreenFill}   {HTML}{EAF3DE}
+\definecolor{GreenStroke} {HTML}{3B6D11}
+\definecolor{SigGray}     {HTML}{5F5E5A}
+\definecolor{BypassRed}   {HTML}{993C1D}
+
+\tikzset{
+  bsblock/.style={draw, rounded corners=4pt, minimum width=4.4cm,
+    minimum height=1.3cm, align=center, line width=0.5pt,
+    inner sep=6pt, font=\small\bfseries},
+  bsstagebox/.style={draw, rounded corners=8pt, line width=0.6pt, dashed, inner sep=14pt},
+  bsnotebox/.style={draw=BypassRed, rounded corners=4pt, line width=0.5pt,
+    fill=white, inner sep=7pt, align=left,
+    font=\fontsize{7}{9}\selectfont, text=BypassRed},
+  bsio/.style={bsblock, fill=TealFill,   draw=TealStroke,   text=TealStroke},
+  bss1/.style={bsblock, fill=PurpleFill, draw=PurpleStroke, text=PurpleStroke},
+  bss2/.style={bsblock, fill=BlueFill,   draw=BlueStroke,   text=BlueStroke},
+  bscfg/.style={bsblock, fill=AmberFill, draw=AmberStroke,  text=AmberStroke,
+    minimum width=3.2cm, minimum height=1.0cm},
+  bsout/.style={bsblock, fill=GreenFill, draw=GreenStroke,  text=GreenStroke,
+    minimum width=3.0cm},
+  bssig/.style={-{Stealth[length=5pt,width=4pt]}, color=SigGray, line width=0.6pt},
+  bssd/.style={-{Stealth[length=4pt,width=3.5pt]}, color=SigGray, line width=0.5pt, dashed},
+  bslbl/.style={font=\fontsize{6.5}{8}\selectfont\itshape, text=SigGray, fill=white, inner sep=1.5pt},
+}
+
+\setcounter{figure}{2}
+\begin{figure}[!ht]
+\centering
+\begin{tikzpicture}
+
+\node[bsio]  (IN)   at ( 1.5,-1.5) {AXI Request\\[2pt]{\fontsize{6.5}{8}\selectfont\mdseries\color{SigGray}\{addr, len, size, id\}}};
+\node[bscfg] (CFG1) at ( 7.5, 2.2) {Config Regs\\[2pt]{\fontsize{6.5}{8}\selectfont\mdseries\color{SigGray}addr map, page size}};
+\node[bss1]  (S1C)  at ( 7.5, 0.0) {Page Boundary Check\\[2pt]{\fontsize{6.5}{8}\selectfont\mdseries\color{SigGray}does burst cross a row boundary?}};
+\node[bss1]  (S1S)  at ( 7.5,-3.0) {Page Boundary Split\\[2pt]{\fontsize{6.5}{8}\selectfont\mdseries\color{SigGray}emit one sub-transaction per row}};
+\node[bscfg] (CFG2) at (15.0, 2.2) {Config Regs\\[2pt]{\fontsize{6.5}{8}\selectfont\mdseries\color{SigGray}mem type, burst length}};
+\node[bss2]  (S2C)  at (15.0, 0.0) {Burst Length Check\\[2pt]{\fontsize{6.5}{8}\selectfont\mdseries\color{SigGray}exceeds BL or column misaligned?}};
+\node[bss2]  (S2S)  at (15.0,-3.0) {Memory Cmd Split\\[2pt]{\fontsize{6.5}{8}\selectfont\mdseries\color{SigGray}split to BL, align start column}};
+\node[bsout] (OUT)  at (21.8,-1.5) {Cmd Pool\\[2pt]{\fontsize{6.5}{8}\selectfont\mdseries\color{SigGray}\texttt{WR\_CMD / RD\_CMD + tag}}};
+
+\coordinate (FORK) at (4.2,-1.5);
+\draw[bssig] (IN.east) -- (FORK);
+\draw[bssig] (FORK) |- (S1C.west);
+\draw[bssig] (FORK) |- (S1S.west);
+\node[bslbl, anchor=north] at (5.8,-0.62) {\{addr,len,size,id\}};
+
+\draw[bssig] (S1C.south) -- (S1S.north)
+  node[bslbl, midway, right=5pt] {boundary crossed};
+\draw[bssig] (S1C.east) -- (S2C.west)
+  node[bslbl, midway, above=4pt] {no split --- pass through};
+\draw[bssig] (S1S.east) -- (S2S.west)
+  node[bslbl, midway, above=4pt] {sub-transactions};
+\draw[bssig] (S2C.south) -- (S2S.north);
+\node[bslbl, align=center, anchor=center] at (16.4,-1.5) {exceeds BL /\\[-1pt]misaligned};
+
+\coordinate (MERGE2) at (19.5,-1.5);
+\draw[SigGray, line width=0.6pt] (S2C.east) -- ++(0.8,0) |- (MERGE2);
+\draw[SigGray, line width=0.6pt] (S2S.east) -- ++(0.8,0) |- (MERGE2);
+\draw[bssig] (MERGE2) -- (OUT.west);
+\node[bslbl, anchor=south] at (18.0,-0.62) {fits in one cmd};
+\node[bslbl, anchor=north] at (18.0,-2.38) {memory commands};
+
+\draw[bssd] (CFG1.south) -- (S1C.north)
+  node[bslbl, midway, right=3pt] {page size};
+\draw[bssd] (CFG2.south) -- (S2C.north)
+  node[bslbl, midway, right=3pt] {BL, mem type};
+
+\begin{scope}[on background layer]
+  \node[bsstagebox, fill=PurpleFill, fill opacity=0.07, draw=PurpleStroke,
+    fit=(CFG1)(S1C)(S1S),
+    label={[font=\small\bfseries, text=PurpleStroke, yshift=4pt]
+           above:Stage 1 \textemdash\ Page Boundary Split}] {};
+  \node[bsstagebox, fill=BlueFill, fill opacity=0.07, draw=BlueStroke,
+    fit=(CFG2)(S2C)(S2S),
+    label={[font=\small\bfseries, text=BlueStroke, yshift=4pt]
+           above:Stage 2 \textemdash\ Memory Command Split}] {};
+\end{scope}
+
+\node[bsnotebox, text width=3.4cm, anchor=north east] at (26.0,3.5) {%
+  \textbf{Compile-time flags}\\[4pt]
+  \texttt{STAGE1\_EN=0}\\
+  Stage~1 bypassed.\\
+  AXI burst must not\\
+  cross a page boundary.\\[5pt]
+  \texttt{STAGE2\_EN=0}\\
+  Stage~2 bypassed.\\
+  Transfer must fit\\
+  within one memory\\
+  command.%
+};
+
+\end{tikzpicture}
+\caption{Burst Splitter internal pipeline. Stage~1 splits an AXI request at row
+boundaries into linear transactions each confined to a single row. Stage~2 divides
+each into memory commands sized to the configured burst length and aligned to the
+start column address. Both stages are individually enabled or disabled at compile time.}
+\label{fig:burst-splitter}
+\end{figure}
+
+\noindent\textbf{\color{DfiD}Address Calculation}\par\vspace{6pt}
+
+All address arithmetic is performed in byte units on the AXI byte address before it is handed to the Address Translator. The two key quantities computed per sub-transaction are the row-boundary address used by Stage 1 and the column-aligned start address used by Stage 2.
+
+Stage 1 — row boundary detection. The active address-mapping mode read from the config registers determines the row-address width $R$ and the column-address width $C$. The column-address width $C$ defines how many addressable column locations exist per row, so the total number of bytes in one DRAM row is:
+\[
+  \textit{ROW\_BYTES} = 2^{C} \times \textit{BUS\_WIDTH\_BYTES}
+\]
+where \texttt{BUS\_WIDTH\_BYTES} is 8 for the 64-bit data bus. The byte address of the row boundary immediately above a transaction starting at byte address $A$ is:
+\[
+  A_{\text{row\_end}} = \bigl(\lfloor A / \textit{ROW\_BYTES} \rfloor + 1\bigr)
+                        \times \textit{ROW\_BYTES}
+\]
+The burst crosses a row boundary if and only if $A + \textit{LEN\_BYTES} > A_{\text{row\_end}}$, where $\textit{LEN\_BYTES} = (\texttt{ARLEN} + 1) \times \texttt{BUS\_WIDTH\_BYTES}$. When a split is required, the first sub-transaction runs from $A$ to $A_{\text{row\_end}}$ minus 1. Subsequent sub-transactions start at successive row boundaries, each of length $\textit{ROW\_BYTES}$, except the final sub-transaction which covers the remaining bytes.
+
+Stage 2 — burst-length alignment. The configured memory burst length $\textit{BL}$ sets the atomic transfer granule. For DDR4 BL8 for example, the number of bytes per memory command is:
+\[
+  \textit{CMD\_BYTES} = \textit{BL} \times \textit{BUS\_WIDTH\_BYTES}
+\]
+The column-aligned start address of a sub-transaction at byte address $A'$ is:
+\[
+  A'_{\text{aligned}} = \lfloor A' / \textit{CMD\_BYTES} \rfloor
+                        \times \textit{CMD\_BYTES}
+\]
+If $A'$ is not already aligned, meaning $A' \bmod \textit{CMD\_BYTES}$ is not zero, the first memory command covers the partial beat from $A'$ to the next aligned boundary. The byte-enable mask \texttt{BE} is set only for the active lanes in this first command. Each subsequent command is naturally aligned and carries a full-width \texttt{BE}\,=\,\texttt{0xFF}. The total number of memory commands issued for a sub-transaction of $N_{\text{bytes}}$ bytes starting at $A'$ is:
+\[
+  N_{\text{cmds}} =
+    \left\lceil \frac{(A' \bmod \textit{CMD\_BYTES}) + N_{\text{bytes}}}
+                     {\textit{CMD\_BYTES}} \right\rceil
+\]
+Each emitted \texttt{RD\_CMD}/\texttt{WR\_CMD} packet carries $\{$\texttt{rank, bank, row, col}$\}$ derived by the Address Translator from $A'_{\text{aligned}}$, plus the byte-enable mask and the transaction tag.
+
+\section{Reorder Buffer (ROB)}
+
+The Reorder Buffer restores AXI read-response order after DRAM-domain reordering. It operates entirely within the client clock domain; the Async FIFO CDC boundary is upstream of it.
+
+The DRAM scheduler reorders read commands across AXI IDs to maximise row-hit rate. AXI4 requires that responses to the same AXID are returned in issue order, but places no ordering constraint across different AXIDs. A naive single-queue ROB would stall all AXIDs whenever one AXID's data is delayed, which eliminates the scheduling benefit entirely.
+
+The ROB solves this using a composite tag $\{$AXID, seqnum$\}$. Each AXID has a dedicated counter that increments strictly with every issued read command. This seqnum, combined with the AXID, forms a globally unique tag for every in-flight request. The tag is embedded into the \texttt{RD\_CMD} by the Tag Insertion block. The tagged command then exits the ROB and crosses the Async FIFO CDC boundary into the DRAM domain.
+
+On the return path, data arrives back from the DRAM domain as $\{$tag, data$\}$ pairs. The Tag Lookup and Fill block decodes the tag to recover the AXID and seqnum, writes the data into the correct slot in \texttt{queue[AXID][seqnum]}, and sets the slot valid bit. This write is non-blocking, meaning it does not wait for earlier slots of the same AXID to be filled first.
+
+Retirement Logic maintains a per-AXID HEAD pointer, initialised to seqnum 0. Each cycle, if the slot at HEAD is valid, it is retired: the data is forwarded to the AXI Read Port with the correct \texttt{RID} and the HEAD pointer advances to the next seqnum. Each AXID retires independently, so a stalled AXID never blocks another.
+
+The following table summarizes the key correctness properties of the ROB design:
+
+\begin{tabular}{p{4.2cm} p{13.5cm}}
+\toprule
+\textbf{Property} & \textbf{Guarantee} \\
+\midrule
+Same-AXID ordering & Responses retire in strict seqnum order (HEAD advances
+                     only when the next slot is valid). \\[3pt]
+Cross-AXID isolation & Per-AXID queues and HEAD pointers are independent;
+                       no AXID can block another. \\[3pt]
+Tag uniqueness & $\{$AXID,\,seqnum$\}$ is globally unique for all in-flight
+                 commands because seqnum is per-AXID and strictly increasing. \\[3pt]
+No Async FIFO inside ROB & The CDC boundary sits outside the ROB. The ROB
+                           operates on a single (client) clock, simplifying
+                           timing closure. \\
+\bottomrule
+\end{tabular}
+
+Figure~\ref{fig:rob_arch} below shows the complete internal architecture of the ROB.
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.9\linewidth]{rob.pdf}
+\caption{Internal architecture of the Reorder Buffer (ROB). The ROB reconstructs AXI read responses from potentially out-of-order DRAM returns while preserving per-AXID ordering.}
+\label{fig:rob_arch}
+\end{figure}
+
+\section{Address Translator}
+
+The Address Translator converts a byte address from the Burst Splitter into the physical DRAM address tuple required by the memory controller. It extracts rank, bank group, bank, row, and column fields from the byte address using a configurable bit-field mapping stored in the Config Registers.
+
+The Bit Field Extractor takes the input byte address and slices it into DRAM address fields based on the configured \texttt{addr\_map\_mode} and the programmed bit widths for each field. The bit boundaries are fully register-programmable, which allows the same RTL to correctly map addresses for DDR3, DDR4, DDR5, and LPDDR4 without any RTL changes. For example, DDR3 has no bank group field, while DDR4 introduces two bank group bits at a different position in the address.
+
+The CMD Builder takes the extracted fields along with the AXI metadata (\texttt{AXID, tag, byte-enable mask}) passed through from the input and packs them into a complete \texttt{RD\_CMD} or \texttt{WR\_CMD} packet. This packet is then forwarded to the Read or Write Command Pool, where it awaits transmission to the DRAM domain.
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.85\linewidth]{addr_translator.pdf}
+\caption{Address Translator pipeline. The Bit Field Extractor decodes the byte address into DRAM fields according to the configured memory map; the CMD Builder packs extracted fields with AXI metadata to form the final command packet.}
+\label{fig:addr_translator}
+\end{figure}
+
+\section{Merge Logic}
+
+The Merge Logic reassembles fragments from split DRAM read transactions into complete burst responses before passing them to the Reorder Buffer. When the Burst Splitter divides a single AXI read into multiple sub-commands due to row boundary crossings or burst length constraints, each sub-command is issued independently to the DRAM domain and may return out of order due to DRAM scheduling. Merge Logic is responsible for collecting all fragments belonging to the same original transaction and concatenating them in the correct order.
+
+The Tag Decoder is the first stage. It receives each returning $\{$tag, data$\}$ beat from the Read Data Path and extracts the original transaction metadata from the tag field, specifically the \texttt{AXID}, original command ID, fragment index, and total fragment count.
+
+The Fragment Buffer stores each arriving data beat at the address \texttt{[axid][frag\_idx]}. Each slot holds the data word and a valid bit. Fragments can be written in any order since the \texttt{frag\_idx} field in the tag directly identifies the correct storage location.
+
+The Reassembly Tracker maintains two counters per AXID: \texttt{frag\_count} tracks how many fragments have arrived, and \texttt{expected} holds the total number of fragments for the transaction, latched from \texttt{frag\_total} when the first fragment arrives. When \texttt{frag\_count} equals \texttt{expected}, the tracker asserts \texttt{burst\_complete} for that AXID.
+
+The Output Mux reads all stored fragments for the completed transaction in \texttt{frag\_idx} order from 0 to \texttt{frag\_total} minus 1, concatenates them into a single data burst, and forwards the result to the ROB. For single-fragment transactions where \texttt{frag\_total} equals 1, the data bypasses the Fragment Buffer entirely and passes directly to the Output Mux without any buffering.
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.90\linewidth]{merge_logic.pdf}
+\caption{Merge Logic pipeline. The Tag Decoder extracts metadata from returning data; fragments are buffered and tracked for completion; the Output Mux concatenates reassembled bursts in the correct order.}
+\label{fig:merge_logic}
+\end{figure}
+
+\end{document}
