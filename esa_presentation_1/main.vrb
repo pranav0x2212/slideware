@@ -1,0 +1,31 @@
+\frametitle{DFI 5.1 Key Features}
+\begin{columns}[T]
+
+\begin{column}{0.48\textwidth}
+  \vspace{4pt}
+  {\small\textbf{\color{ddrblue}Three Pillars of DFI 5.1}}
+  \begin{enumerate}\setlength\itemsep{7pt}\small
+    \item \textbf{PHY-Independent Boot}\\
+          MC initialises DRAM without knowing PHY internals
+    \item \textbf{Expanded Frequency Range}\\
+          Covers low-power LPDDR through DDR5-6400
+    \item \textbf{Enhanced PHY$\leftrightarrow$MC Interaction}\\
+          Real-time calibration feedback and margining
+  \end{enumerate}
+\end{column}
+
+\begin{column}{0.48\textwidth}
+  \vspace{4pt}
+  {\small\textbf{\color{ddrgreen}Backward Compatibility}}
+  \begin{itemize}\setlength\itemsep{6pt}\small
+    \item Supports DDR through DDR5 and LPDDR through LPDDR5
+    \item One DFI 5.1 MC paired with generation-specific PHY covers every standard
+  \end{itemize}
+  \vspace{8pt}
+  {\small\textbf{\color{ddrred}Why it matters for our MC}}
+  \begin{itemize}\setlength\itemsep{6pt}\small
+    \item Single RTL targets DDR3, DDR4, DDR5 and LPDDR4
+    \item Swapping PHY $=$ different memory standard, same controller
+  \end{itemize}
+\end{column}
+\end{columns}
