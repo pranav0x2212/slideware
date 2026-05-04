@@ -173,6 +173,353 @@
 \end{columns}
 \end{frame}
 
+%% ── SLIDE 2 – DFI Signal Groups ─────────────────────────────
+\begin{frame}[fragile]{DFI Interface: MC \textrightarrow\textleftarrow{} PHY Signal Groups}
+\begin{columns}[T]
+
+\begin{column}{0.50\textwidth}
+  \centering\vspace{4pt}
+  \imgph{0.82\linewidth}{5.2cm}{images/dfi5_2.png}
+\end{column}
+
+\begin{column}{0.46\textwidth}
+  \vspace{6pt}
+  {\small\textbf{\color{ddrblue}Command Interface}}
+  \begin{itemize}\setlength\itemsep{1pt}\footnotesize
+    \item Address, bank, CS\#, CKE, ODT, RAS\#, CAS\#, WE\#
+    \item MC $\to$ PHY; alert feedback PHY $\to$ MC
+  \end{itemize}
+  \vspace{4pt}
+  {\small\textbf{\color{ddrteal}Write Data Interface}}
+  \begin{itemize}\setlength\itemsep{1pt}\footnotesize
+    \item \texttt{dfi\_wrdata}, \texttt{dfi\_wrdata\_en}, \texttt{dfi\_wrdata\_mask}
+    \item CRC and ECC sideband signals
+  \end{itemize}
+  \vspace{4pt}
+  {\small\textbf{\color{ddrgreen}Read Data Interface}}
+  \begin{itemize}\setlength\itemsep{1pt}\footnotesize
+    \item \texttt{dfi\_rddata\_en} MC $\to$ PHY (look-ahead)
+    \item \texttt{dfi\_rddata}, \texttt{dfi\_rddata\_valid} PHY $\to$ MC
+  \end{itemize}
+  \vspace{4pt}
+  {\small\textbf{\color{ddrgold}Update / Status / PHY Managed}}
+  \begin{itemize}\setlength\itemsep{1pt}\footnotesize
+    \item Handshake: \texttt{ctrlupd}, \texttt{phyupd}, \texttt{phymngd}
+    \item Freq ratio, init start/complete, error reporting
+  \end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+%% ── SLIDE 3 – Inter-Lane Skew ───────────────────────────────
+\begin{frame}[fragile]{Inter-Lane Skew: Off-Die Signal Integrity}
+\begin{columns}[T]
+
+\begin{column}{0.38\textwidth}
+  \vspace{4pt}
+  \begin{itemize}\setlength\itemsep{7pt}\small
+    \item DDR transfers data in parallel across multiple DQ byte lanes
+    \item Each lane follows a different PCB path, picking up delay $\delta_i$
+    \item Skew window: $W_\delta = \max(\delta_i) - \min(\delta_i)$
+    \item DDR5 UI $\approx$ 156\,ps; 20\,ps skew eats $>$12\% of it
+    \item PHY training (Write Levelling, DQS Gating) corrects $\delta_i$ per lane
+  \end{itemize}
+\end{column}
+
+\begin{column}{0.58\textwidth}
+  \centering\vspace{12pt}
+  \begin{tikzpicture}[scale=0.82, transform shape]
+    \draw[dashed,ddrgray,thin] (0,0.3)--(0,-4.3)
+          node[below,font=\scriptsize]{Launch $t{=}0$};
+    \draw[dashed,ddrgray,thin] (5.6,0.3)--(5.6,-4.3)
+          node[below,font=\scriptsize]{$t'$};
+    \foreach \i/\y/\lc/\dx in {
+        0/-0.6/ddrblue/0,
+        1/-1.5/ddrgreen/0.25,
+        2/-2.5/ddrred/0.85,
+        3/-3.4/violet/0.35}{
+      \node[left,font=\scriptsize\bfseries,ddrgray] at (0,\y) {Lane \i};
+      \draw[\lc,thick,-{Stealth[length=4pt]}] (0,\y)
+        --node[midway,above,font=\tiny,\lc]{$t'+\delta_\i$}
+          (5.6+\dx,\y);
+      \fill[\lc] (5.6+\dx,\y) circle (2pt);
+    }
+    \draw[thick,ddrred,{Stealth[length=4pt]}-{Stealth[length=4pt]}]
+          (6.65,-1.5)--node[right,font=\scriptsize,ddrred]{$W_\delta$}
+          (6.65,-3.4);
+    \draw[ddrgold,very thick,|-|] (5.60,-4.0)--
+      node[below,font=\tiny,ddrgold]{DVW shrinks by $W_\delta$}(6.45,-4.0);
+  \end{tikzpicture}
+\end{column}
+\end{columns}
+\end{frame}
+
+%% ── SLIDE 4 – Off-Die vs On-Die ─────────────────────────────
+\begin{frame}[fragile]{Off-Die vs On-Die Delay}
+\begin{columns}[T]
+
+\begin{column}{0.32\textwidth}
+  \vspace{2pt}
+  {\small\textbf{\color{ddrblue}Off-Die (Picoseconds)}}
+  \begin{itemize}\setlength\itemsep{2pt}\small
+    \item Signals traverse PCB traces, vias
+    \item FR4 velocity $\approx 0.6c$; $\sim$1\,ps per 180\,\si{\micro m}
+    \item 30\,mm trace $\approx$ 170\,ps; $W_\delta$ typically 5--50\,ps
+  \end{itemize}
+  \vspace{5pt}
+  {\small\textbf{\color{ddrteal}On-Die (Femto/Attoseconds)}}
+  \begin{itemize}\setlength\itemsep{2pt}\small
+    \item nm-scale on-chip metal interconnect
+    \item 1\,\si{\micro m} wire $\approx$ 3--10\,as propagation
+    \item Gate delay (3\,nm): 1--5\,ps; bottleneck is logic depth
+  \end{itemize}
+  \vspace{5pt}
+  {\small\itshape PCB/package is the timing bottleneck, not the silicon.}
+\end{column}
+
+\begin{column}{0.64\textwidth}
+  \centering\vspace{6pt}
+  \begin{tikzpicture}[scale=0.84, transform shape]
+    \fill[ddrlight,rounded corners=4pt] (0,0) rectangle (6.4,2.2);
+    \draw[ddrblue,thick,rounded corners=2pt] (0,0) rectangle (6.4,2.2);
+    \node[font=\tiny\bfseries,ddrgray] at (3.2,2.04) {PCB (Off-Die)};
+    \fill[ddrblue!70,rounded corners=2pt] (0.2,0.65) rectangle (1.4,1.55);
+    \node[white,font=\tiny\bfseries,align=center] at (0.80,1.10) {SoC\\PHY};
+    \fill[ddrteal!70,rounded corners=2pt] (4.6,0.65) rectangle (5.6,1.55);
+    \node[white,font=\tiny\bfseries] at (5.10,1.10) {DRAM};
+    \foreach \y/\col in {0.80/ddrblue,0.99/ddrgreen,1.18/ddrred,1.37/violet}{
+      \draw[\col,thick] (1.4,\y)--(4.6,\y);
+      \fill[\col] (4.6,\y) circle (1.5pt);
+    }
+    \draw[{Stealth[length=3pt]}-{Stealth[length=3pt]},ddrred,thick]
+         (5.85,0.80)--node[right,font=\tiny,ddrred]{$W_\delta$}(5.85,1.37);
+    \draw[ddrred,dashed,thin] (4.6,0.80)--(6.05,0.80);
+    \draw[ddrred,dashed,thin] (4.6,1.37)--(6.05,1.37);
+    \node[font=\tiny,ddrgray] at (3.2,0.25) {$\sim$170\,ps per 30\,mm on FR4};
+  \end{tikzpicture}
+
+  \vspace{8pt}
+
+  \begin{tikzpicture}[scale=0.90, transform shape]
+    \draw[thick,ddrgray,->] (0,0)--(6.2,0)
+          node[right,font=\tiny]{time (log scale)};
+    \foreach \x/\lab/\col in {
+      0.3/{1 as}/ddrblue, 1.2/{1 fs}/ddrteal,
+      2.1/{1 ps}/ddrred,  3.0/{1 ns}/ddrgold}{
+      \draw[\col,thick] (\x,-0.15)--(\x,0.15);
+      \node[\col,font=\tiny,rotate=30,anchor=west] at (\x,0.18) {\lab};
+    }
+    \draw[ddrblue,very thick,|-|] (0.3,-0.65)
+          --node[below,font=\tiny,ddrblue]{on-die EM}(1.2,-0.65);
+    \draw[ddrgreen,very thick,|-|] (1.2,-1.15)
+          --node[below,font=\tiny,ddrgreen]{gate delay}(2.1,-1.15);
+    \draw[ddrred,very thick,|-|] (2.1,-0.65)
+          --node[below,font=\tiny,ddrred]{off-die skew}(3.0,-0.65);
+    \draw[ddrteal,very thick,|-|] (2.4,-1.15)
+          --node[below,font=\tiny,ddrteal]{DDR5 UI}(2.65,-1.15);
+  \end{tikzpicture}
+\end{column}
+\end{columns}
+\end{frame}
+
+%% ── SLIDE 5 – Eye Diagram Fundamentals ──────────────────────
+\begin{frame}[fragile]{Eye Diagram Fundamentals}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+  \centering\vspace{6pt}
+  \imgph{0.75\linewidth}{5.0cm}{images/eye.png}
+\end{column}
+\begin{column}{0.48\textwidth}
+  \vspace{4pt}
+  {\small\textbf{\color{ddrblue}Key Regions}}
+  \begin{itemize}\setlength\itemsep{4pt}\footnotesize
+    \item \textbf{Eye Width:} horizontal opening between transition windows
+    \item \textbf{Transition Window:} region where $0{\to}1$ or $1{\to}0$ switching occurs
+    \item \textbf{Steady-State Window:} stable HIGH or LOW; sampled here
+    \item \textbf{Unit Interval (UI):} one bit period; eye must open within it
+  \end{itemize}
+  \vspace{6pt}
+  {\small\textbf{\color{ddrteal}Why it matters}}
+  \begin{itemize}\setlength\itemsep{4pt}\footnotesize
+    \item Receiver samples at eye centre for maximum margin
+    \item Noise and jitter reduce eye opening
+    \item At DDR5-6400: UI $=$ 156\,ps --- any skew directly closes the eye
+  \end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+%% ── SLIDE 6 – Trained vs Untrained Eye ──────────────────────
+\begin{frame}[fragile]{Eye Diagram: Trained vs Untrained}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+  \centering
+  {\small\textbf{\color{ddrred}Untrained Eye}}\\[4pt]
+  \imgph{0.55\linewidth}{3.2cm}{images/u_eye.png}\\[4pt]
+  \begin{itemize}\setlength\itemsep{3pt}\small
+    \item Lane skew $\delta_i$ closes eye horizontally
+    \item VREF offset closes eye vertically
+    \item ISI and jitter blur transition edges
+    \item High BER --- unreliable data capture
+  \end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+  \centering
+  {\small\textbf{\color{ddrgreen}Trained \& Calibrated Eye}}\\[4pt]
+  \imgph{0.55\linewidth}{3.2cm}{images/t_eye.png}\\[4pt]
+  \begin{itemize}\setlength\itemsep{3pt}\small
+    \item Write Levelling corrects DQS-to-CK skew $\delta_i$
+    \item Read centering places sample point at eye centre
+    \item ZQ calibration sets correct driver impedance
+    \item 2D VREF scan optimises voltage margin $M_V$
+  \end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+%% ── SLIDE 7 – Why Picoseconds Matter ────────────────────────
+\begin{frame}[fragile]{Why Picoseconds Matter at Modern DDR Speeds}
+\begin{columns}[T]
+
+\begin{column}{0.52\textwidth}
+  \centering\vspace{4pt}
+  \begin{tikzpicture}
+    \begin{axis}[
+      ybar, bar width=11pt,
+      width=8.6cm, height=6.0cm,
+      xlabel={Speed Grade},
+      ylabel={Time (ps)},
+      xtick={1,2,3,4,5},
+      xticklabels={DDR3-1066,DDR3-2133,DDR4-3200,DDR5-4800,DDR5-6400},
+      xticklabel style={font=\tiny,rotate=22,anchor=north east},
+      yticklabel style={font=\tiny},
+      xlabel style={font=\scriptsize},
+      ylabel style={font=\scriptsize},
+      ymajorgrids=true,
+      grid style={dashed,gray!25},
+      legend style={font=\tiny,at={(0.97,0.97)},anchor=north east},
+      ymin=0, ymax=1050,
+    ]
+      \addplot[fill=ddrblue!65,draw=ddrblue] coordinates
+        {(1,937)(2,469)(3,312)(4,208)(5,156)};
+      \addplot[fill=ddrred!70,draw=ddrred] coordinates
+        {(1,46.9)(2,23.4)(3,15.6)(4,10.4)(5,7.8)};
+      \legend{Unit Interval (ps), 5\% Skew Budget (ps)}
+    \end{axis}
+  \end{tikzpicture}
+\end{column}
+
+\begin{column}{0.44\textwidth}
+  \vspace{6pt}
+  \centering
+  \rowcolors{2}{ddrlight}{white}
+  {\footnotesize
+  \begin{tabular}{@{}lrr@{}}
+    \toprule
+    \textbf{Speed} & \textbf{UI} & \textbf{5\% Budget}\\
+    \midrule
+    DDR3-1066 & 937\,ps & 46.9\,ps\\
+    DDR3-2133 & 469\,ps & 23.4\,ps\\
+    DDR4-3200 & 312\,ps & 15.6\,ps\\
+    DDR5-4800 & 208\,ps & 10.4\,ps\\
+    DDR5-6400 & 156\,ps & \textcolor{ddrred}{\textbf{7.8\,ps}}\\
+    \bottomrule
+  \end{tabular}}
+
+  \vspace{8pt}
+  \begin{itemize}\setlength\itemsep{4pt}\small
+    \item At DDR5-6400 skew budget is just \textbf{7.8\,ps}
+    \item Uncompensated off-die skew can fill this entirely
+    \item PHY training trims $\delta_i$ to $\ll$5\,ps per lane
+  \end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+%% ── SLIDE 8 – DFI Standard ──────────────────────────────────
+\begin{frame}[fragile]{DFI: The Standard MC--PHY Interface}
+\begin{columns}[T]
+
+\begin{column}{0.38\textwidth}
+  \vspace{4pt}
+  \begin{itemize}\setlength\itemsep{7pt}\small
+    \item \textbf{DFI} is the industry-standard interface between MC and DDR PHY
+    \item Decouples MC from PHY implementation details
+    \item Covers command, data, training and power signals
+    \item DFI 5.1: PHY-independent boot, expanded freq range, enhanced calibration feedback
+  \end{itemize}
+\end{column}
+
+\begin{column}{0.58\textwidth}
+  \centering\vspace{4pt}
+  \begin{tikzpicture}[scale=0.86, transform shape]
+    \node[box=ddrblue,minimum width=28mm,minimum height=12mm,font=\small\bfseries]
+      (mc) at (0,0) {Memory\\Controller};
+    \node[phy,minimum width=26mm,minimum height=12mm,font=\small\bfseries]
+      (phy) at (4.0,0) {DDR PHY};
+    \node[ddrbox=ddrblue,minimum width=22mm,minimum height=12mm]
+      (ddr) at (7.4,0) {DDR\\Memory};
+    \draw[arr=ddrgold,<->,very thick]
+      (mc.east)--node[above,font=\scriptsize\bfseries,ddrgold]{DFI 5.1}
+                  node[below,font=\tiny,ddrgray]{Standard IF}(phy.west);
+    \draw[arr=ddrblue,->]
+      (phy.east)--node[above,font=\tiny]{DDR IF}(ddr.west);
+  \end{tikzpicture}
+
+  \vspace{10pt}
+  \rowcolors{2}{ddrlight}{white}
+  {\scriptsize
+  \begin{tabular}{@{}clp{28mm}@{}}
+    \toprule
+    \textbf{Ver} & \textbf{Key Addition} & \textbf{Support}\\
+    \midrule
+    1.0 & Initial spec          & DDR, DDR2\\
+    2.0 & Training interface    & DDR3, LPDDR2\\
+    3.0 & Low-power handshake   & DDR4, LPDDR4\\
+    4.0 & DDR4/LPDDR4 paths     & DDR4, LPDDR4\\
+    5.0 & PHY-independent boot  & DDR5, LPDDR5\\
+    \rowcolor{ddrgold!30}
+    \textbf{5.1} & \textbf{Full back-compat} & \textbf{All gens}\\
+    \bottomrule
+  \end{tabular}}
+\end{column}
+\end{columns}
+\end{frame}
+
+%% ── SLIDE 9 – DFI 5.1 Key Features ─────────────────────────
+\begin{frame}[fragile]{DFI 5.1 Key Features}
+\begin{columns}[T]
+
+\begin{column}{0.48\textwidth}
+  \vspace{4pt}
+  {\small\textbf{\color{ddrblue}Three Pillars of DFI 5.1}}
+  \begin{enumerate}\setlength\itemsep{7pt}\small
+    \item \textbf{PHY-Independent Boot}\\
+          MC initialises DRAM without knowing PHY internals
+    \item \textbf{Expanded Frequency Range}\\
+          Covers low-power LPDDR through DDR5-6400
+    \item \textbf{Enhanced PHY$\leftrightarrow$MC Interaction}\\
+          Real-time calibration feedback and margining
+  \end{enumerate}
+\end{column}
+
+\begin{column}{0.48\textwidth}
+  \vspace{4pt}
+  {\small\textbf{\color{ddrgreen}Backward Compatibility}}
+  \begin{itemize}\setlength\itemsep{6pt}\small
+    \item Supports DDR through DDR5 and LPDDR through LPDDR5
+    \item One DFI 5.1 MC paired with generation-specific PHY covers every standard
+  \end{itemize}
+  \vspace{8pt}
+  {\small\textbf{\color{ddrred}Why it matters for our MC}}
+  \begin{itemize}\setlength\itemsep{6pt}\small
+    \item Single RTL targets DDR3, DDR4, DDR5 and LPDDR4
+    \item Swapping PHY $=$ different memory standard, same controller
+  \end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
 %% ── SLIDE 10 – JEDEC Comparison Table ───────────────────────
 \begin{frame}{DDR3 / DDR4 / DDR5 --- JEDEC Key Specs}
   \vspace{-8pt}
@@ -413,352 +760,4 @@
 
   \end{columns}
 \end{frame}
-
-%% ── SLIDE 3 – Inter-Lane Skew ───────────────────────────────
-\begin{frame}[fragile]{Inter-Lane Skew: Off-Die Signal Integrity}
-\begin{columns}[T]
-
-\begin{column}{0.38\textwidth}
-  \vspace{4pt}
-  \begin{itemize}\setlength\itemsep{7pt}\small
-    \item DDR transfers data in parallel across multiple DQ byte lanes
-    \item Each lane follows a different PCB path, picking up delay $\delta_i$
-    \item Skew window: $W_\delta = \max(\delta_i) - \min(\delta_i)$
-    \item DDR5 UI $\approx$ 156\,ps; 20\,ps skew eats $>$12\% of it
-    \item PHY training (Write Levelling, DQS Gating) corrects $\delta_i$ per lane
-  \end{itemize}
-\end{column}
-
-\begin{column}{0.58\textwidth}
-  \centering\vspace{12pt}
-  \begin{tikzpicture}[scale=0.82, transform shape]
-    \draw[dashed,ddrgray,thin] (0,0.3)--(0,-4.3)
-          node[below,font=\scriptsize]{Launch $t{=}0$};
-    \draw[dashed,ddrgray,thin] (5.6,0.3)--(5.6,-4.3)
-          node[below,font=\scriptsize]{$t'$};
-    \foreach \i/\y/\lc/\dx in {
-        0/-0.6/ddrblue/0,
-        1/-1.5/ddrgreen/0.25,
-        2/-2.5/ddrred/0.85,
-        3/-3.4/violet/0.35}{
-      \node[left,font=\scriptsize\bfseries,ddrgray] at (0,\y) {Lane \i};
-      \draw[\lc,thick,-{Stealth[length=4pt]}] (0,\y)
-        --node[midway,above,font=\tiny,\lc]{$t'+\delta_\i$}
-          (5.6+\dx,\y);
-      \fill[\lc] (5.6+\dx,\y) circle (2pt);
-    }
-    \draw[thick,ddrred,{Stealth[length=4pt]}-{Stealth[length=4pt]}]
-          (6.65,-1.5)--node[right,font=\scriptsize,ddrred]{$W_\delta$}
-          (6.65,-3.4);
-    \draw[ddrgold,very thick,|-|] (5.60,-4.0)--
-      node[below,font=\tiny,ddrgold]{DVW shrinks by $W_\delta$}(6.45,-4.0);
-  \end{tikzpicture}
-\end{column}
-\end{columns}
-\end{frame}
-
-%% ── SLIDE 4 – Off-Die vs On-Die Delay ─────────────────────────────
-\begin{frame}[fragile]{Off-Die vs On-Die Delay}
-\begin{columns}[T]
-
-\begin{column}{0.32\textwidth}
-  \vspace{2pt}
-  {\small\textbf{\color{ddrblue}Off-Die (Picoseconds)}}
-  \begin{itemize}\setlength\itemsep{2pt}\small
-    \item Signals traverse PCB traces, vias
-    \item FR4 velocity $\approx 0.6c$; $\sim$1\,ps per 180\,\si{\micro m}
-    \item 30\,mm trace $\approx$ 170\,ps; $W_\delta$ typically 5--50\,ps
-  \end{itemize}
-  \vspace{5pt}
-  {\small\textbf{\color{ddrteal}On-Die (Femto/Attoseconds)}}
-  \begin{itemize}\setlength\itemsep{2pt}\small
-    \item nm-scale on-chip metal interconnect
-    \item 1\,\si{\micro m} wire $\approx$ 3--10\,as propagation
-    \item Gate delay (3\,nm): 1--5\,ps; bottleneck is logic depth
-  \end{itemize}
-  \vspace{5pt}
-  {\small\itshape PCB/package is the timing bottleneck, not the silicon.}
-\end{column}
-
-\begin{column}{0.64\textwidth}
-  \centering\vspace{6pt}
-  \begin{tikzpicture}[scale=0.84, transform shape]
-    \fill[ddrlight,rounded corners=4pt] (0,0) rectangle (6.4,2.2);
-    \draw[ddrblue,thick,rounded corners=2pt] (0,0) rectangle (6.4,2.2);
-    \node[font=\tiny\bfseries,ddrgray] at (3.2,2.04) {PCB (Off-Die)};
-    \fill[ddrblue!70,rounded corners=2pt] (0.2,0.65) rectangle (1.4,1.55);
-    \node[white,font=\tiny\bfseries,align=center] at (0.80,1.10) {SoC\\PHY};
-    \fill[ddrteal!70,rounded corners=2pt] (4.6,0.65) rectangle (5.6,1.55);
-    \node[white,font=\tiny\bfseries] at (5.10,1.10) {DRAM};
-    \foreach \y/\col in {0.80/ddrblue,0.99/ddrgreen,1.18/ddrred,1.37/violet}{
-      \draw[\col,thick] (1.4,\y)--(4.6,\y);
-      \fill[\col] (4.6,\y) circle (1.5pt);
-    }
-    \draw[{Stealth[length=3pt]}-{Stealth[length=3pt]},ddrred,thick]
-         (5.85,0.80)--node[right,font=\tiny,ddrred]{$W_\delta$}(5.85,1.37);
-    \draw[ddrred,dashed,thin] (4.6,0.80)--(6.05,0.80);
-    \draw[ddrred,dashed,thin] (4.6,1.37)--(6.05,1.37);
-    \node[font=\tiny,ddrgray] at (3.2,0.25) {$\sim$170\,ps per 30\,mm on FR4};
-  \end{tikzpicture}
-
-  \vspace{8pt}
-
-  \begin{tikzpicture}[scale=0.90, transform shape]
-    \draw[thick,ddrgray,->] (0,0)--(6.2,0)
-          node[right,font=\tiny]{time (log scale)};
-    \foreach \x/\lab/\col in {
-      0.3/{1 as}/ddrblue, 1.2/{1 fs}/ddrteal,
-      2.1/{1 ps}/ddrred,  3.0/{1 ns}/ddrgold}{
-      \draw[\col,thick] (\x,-0.15)--(\x,0.15);
-      \node[\col,font=\tiny,rotate=30,anchor=west] at (\x,0.18) {\lab};
-    }
-    \draw[ddrblue,very thick,|-|] (0.3,-0.65)
-          --node[below,font=\tiny,ddrblue]{on-die EM}(1.2,-0.65);
-    \draw[ddrgreen,very thick,|-|] (1.2,-1.15)
-          --node[below,font=\tiny,ddrgreen]{gate delay}(2.1,-1.15);
-    \draw[ddrred,very thick,|-|] (2.1,-0.65)
-          --node[below,font=\tiny,ddrred]{off-die skew}(3.0,-0.65);
-    \draw[ddrteal,very thick,|-|] (2.4,-1.15)
-          --node[below,font=\tiny,ddrteal]{DDR5 UI}(2.65,-1.15);
-  \end{tikzpicture}
-\end{column}
-\end{columns}
-\end{frame}
-
-%% ── SLIDE 7 – Why Picoseconds Matter ────────────────────────
-\begin{frame}[fragile]{Why Picoseconds Matter at Modern DDR Speeds}
-\begin{columns}[T]
-
-\begin{column}{0.52\textwidth}
-  \centering\vspace{4pt}
-  \begin{tikzpicture}
-    \begin{axis}[
-      ybar, bar width=11pt,
-      width=8.6cm, height=6.0cm,
-      xlabel={Speed Grade},
-      ylabel={Time (ps)},
-      xtick={1,2,3,4,5},
-      xticklabels={DDR3-1066,DDR3-2133,DDR4-3200,DDR5-4800,DDR5-6400},
-      xticklabel style={font=\tiny,rotate=22,anchor=north east},
-      yticklabel style={font=\tiny},
-      xlabel style={font=\scriptsize},
-      ylabel style={font=\scriptsize},
-      ymajorgrids=true,
-      grid style={dashed,gray!25},
-      legend style={font=\tiny,at={(0.97,0.97)},anchor=north east},
-      ymin=0, ymax=1050,
-    ]
-      \addplot[fill=ddrblue!65,draw=ddrblue] coordinates
-        {(1,937)(2,469)(3,312)(4,208)(5,156)};
-      \addplot[fill=ddrred!70,draw=ddrred] coordinates
-        {(1,46.9)(2,23.4)(3,15.6)(4,10.4)(5,7.8)};
-      \legend{Unit Interval (ps), 5\% Skew Budget (ps)}
-    \end{axis}
-  \end{tikzpicture}
-\end{column}
-
-\begin{column}{0.44\textwidth}
-  \vspace{6pt}
-  \centering
-  \rowcolors{2}{ddrlight}{white}
-  {\footnotesize
-  \begin{tabular}{@{}lrr@{}}
-    \toprule
-    \textbf{Speed} & \textbf{UI} & \textbf{5\% Budget}\\
-    \midrule
-    DDR3-1066 & 937\,ps & 46.9\,ps\\
-    DDR3-2133 & 469\,ps & 23.4\,ps\\
-    DDR4-3200 & 312\,ps & 15.6\,ps\\
-    DDR5-4800 & 208\,ps & 10.4\,ps\\
-    DDR5-6400 & 156\,ps & \textcolor{ddrred}{\textbf{7.8\,ps}}\\
-    \bottomrule
-  \end{tabular}}
-
-  \vspace{8pt}
-  \begin{itemize}\setlength\itemsep{4pt}\small
-    \item At DDR5-6400 skew budget is just \textbf{7.8\,ps}
-    \item Uncompensated off-die skew can fill this entirely
-    \item PHY training trims $\delta_i$ to $\ll$5\,ps per lane
-  \end{itemize}
-\end{column}
-\end{columns}
-\end{frame}
-
-%% ── SLIDE 5 – Eye Diagram Fundamentals ──────────────────────
-\begin{frame}[fragile]{Eye Diagram Fundamentals}
-\begin{columns}[T]
-\begin{column}{0.48\textwidth}
-  \centering\vspace{6pt}
-  \imgph{0.75\linewidth}{5.0cm}{images/eye.png}
-\end{column}
-\begin{column}{0.48\textwidth}
-  \vspace{4pt}
-  {\small\textbf{\color{ddrblue}Key Regions}}
-  \begin{itemize}\setlength\itemsep{4pt}\footnotesize
-    \item \textbf{Eye Width:} horizontal opening between transition windows
-    \item \textbf{Transition Window:} region where $0{\to}1$ or $1{\to}0$ switching occurs
-    \item \textbf{Steady-State Window:} stable HIGH or LOW; sampled here
-    \item \textbf{Unit Interval (UI):} one bit period; eye must open within it
-  \end{itemize}
-  \vspace{6pt}
-  {\small\textbf{\color{ddrteal}Why it matters}}
-  \begin{itemize}\setlength\itemsep{4pt}\footnotesize
-    \item Receiver samples at eye centre for maximum margin
-    \item Noise and jitter reduce eye opening
-    \item At DDR5-6400: UI $=$ 156\,ps --- any skew directly closes the eye
-  \end{itemize}
-\end{column}
-\end{columns}
-\end{frame}
-
-%% ── SLIDE 6 – Trained vs Untrained Eye ──────────────────────
-\begin{frame}[fragile]{Eye Diagram: Trained vs Untrained}
-\begin{columns}[T]
-\begin{column}{0.48\textwidth}
-  \centering
-  {\small\textbf{\color{ddrred}Untrained Eye}}\\[4pt]
-  \imgph{0.55\linewidth}{3.2cm}{images/u_eye.png}\\[4pt]
-  \begin{itemize}\setlength\itemsep{3pt}\small
-    \item Lane skew $\delta_i$ closes eye horizontally
-    \item VREF offset closes eye vertically
-    \item ISI and jitter blur transition edges
-    \item High BER --- unreliable data capture
-  \end{itemize}
-\end{column}
-\begin{column}{0.48\textwidth}
-  \centering
-  {\small\textbf{\color{ddrgreen}Trained \& Calibrated Eye}}\\[4pt]
-  \imgph{0.55\linewidth}{3.2cm}{images/t_eye.png}\\[4pt]
-  \begin{itemize}\setlength\itemsep{3pt}\small
-    \item Write Levelling corrects DQS-to-CK skew $\delta_i$
-    \item Read centering places sample point at eye centre
-    \item ZQ calibration sets correct driver impedance
-    \item 2D VREF scan optimises voltage margin $M_V$
-  \end{itemize}
-\end{column}
-\end{columns}
-\end{frame}
-
-%% ── SLIDE 2 – DFI Signal Groups ─────────────────────────────
-\begin{frame}[fragile]{DFI Interface: MC \textrightarrow\textleftarrow{} PHY Signal Groups}
-\begin{columns}[T]
-
-\begin{column}{0.50\textwidth}
-  \centering\vspace{4pt}
-  \imgph{0.82\linewidth}{5.2cm}{images/dfi5_2.png}
-\end{column}
-
-\begin{column}{0.46\textwidth}
-  \vspace{6pt}
-  {\small\textbf{\color{ddrblue}Command Interface}}
-  \begin{itemize}\setlength\itemsep{1pt}\footnotesize
-    \item Address, bank, CS\#, CKE, ODT, RAS\#, CAS\#, WE\#
-    \item MC $\to$ PHY; alert feedback PHY $\to$ MC
-  \end{itemize}
-  \vspace{4pt}
-  {\small\textbf{\color{ddrteal}Write Data Interface}}
-  \begin{itemize}\setlength\itemsep{1pt}\footnotesize
-    \item \texttt{dfi\_wrdata}, \texttt{dfi\_wrdata\_en}, \texttt{dfi\_wrdata\_mask}
-    \item CRC and ECC sideband signals
-  \end{itemize}
-  \vspace{4pt}
-  {\small\textbf{\color{ddrgreen}Read Data Interface}}
-  \begin{itemize}\setlength\itemsep{1pt}\footnotesize
-    \item \texttt{dfi\_rddata\_en} MC $\to$ PHY (look-ahead)
-    \item \texttt{dfi\_rddata}, \texttt{dfi\_rddata\_valid} PHY $\to$ MC
-  \end{itemize}
-  \vspace{4pt}
-  {\small\textbf{\color{ddrgold}Update / Status / PHY Managed}}
-  \begin{itemize}\setlength\itemsep{1pt}\footnotesize
-    \item Handshake: \texttt{ctrlupd}, \texttt{phyupd}, \texttt{phymngd}
-    \item Freq ratio, init start/complete, error reporting
-  \end{itemize}
-\end{column}
-\end{columns}
-\end{frame}
-
-%% ── SLIDE 8 – DFI Standard ──────────────────────────────────
-\begin{frame}[fragile]{DFI: The Standard MC--PHY Interface}
-\begin{columns}[T]
-
-\begin{column}{0.38\textwidth}
-  \vspace{4pt}
-  \begin{itemize}\setlength\itemsep{7pt}\small
-    \item \textbf{DFI} is the industry-standard interface between MC and DDR PHY
-    \item Decouples MC from PHY implementation details
-    \item Covers command, data, training and power signals
-    \item DFI 5.1: PHY-independent boot, expanded freq range, enhanced calibration feedback
-  \end{itemize}
-\end{column}
-
-\begin{column}{0.58\textwidth}
-  \centering\vspace{4pt}
-  \begin{tikzpicture}[scale=0.86, transform shape]
-    \node[box=ddrblue,minimum width=28mm,minimum height=12mm,font=\small\bfseries]
-      (mc) at (0,0) {Memory\\Controller};
-    \node[phy,minimum width=26mm,minimum height=12mm,font=\small\bfseries]
-      (phy) at (4.0,0) {DDR PHY};
-    \node[ddrbox=ddrblue,minimum width=22mm,minimum height=12mm]
-      (ddr) at (7.4,0) {DDR\\Memory};
-    \draw[arr=ddrgold,<->,very thick]
-      (mc.east)--node[above,font=\scriptsize\bfseries,ddrgold]{DFI 5.1}
-                  node[below,font=\tiny,ddrgray]{Standard IF}(phy.west);
-    \draw[arr=ddrblue,->]
-      (phy.east)--node[above,font=\tiny]{DDR IF}(ddr.west);
-  \end{tikzpicture}
-
-  \vspace{10pt}
-  \rowcolors{2}{ddrlight}{white}
-  {\scriptsize
-  \begin{tabular}{@{}clp{28mm}@{}}
-    \toprule
-    \textbf{Ver} & \textbf{Key Addition} & \textbf{Support}\\
-    \midrule
-    1.0 & Initial spec          & DDR, DDR2\\
-    2.0 & Training interface    & DDR3, LPDDR2\\
-    3.0 & Low-power handshake   & DDR4, LPDDR4\\
-    4.0 & DDR4/LPDDR4 paths     & DDR4, LPDDR4\\
-    5.0 & PHY-independent boot  & DDR5, LPDDR5\\
-    \rowcolor{ddrgold!30}
-    \textbf{5.1} & \textbf{Full back-compat} & \textbf{All gens}\\
-    \bottomrule
-  \end{tabular}}
-\end{column}
-\end{columns}
-\end{frame}
-
-%% ── SLIDE 9 – DFI 5.1 Key Features ─────────────────────────
-\begin{frame}[fragile]{DFI 5.1 Key Features}
-\begin{columns}[T]
-
-\begin{column}{0.48\textwidth}
-  \vspace{4pt}
-  {\small\textbf{\color{ddrblue}Three Pillars of DFI 5.1}}
-  \begin{enumerate}\setlength\itemsep{7pt}\small
-    \item \textbf{PHY-Independent Boot}\\
-          MC initialises DRAM without knowing PHY internals
-    \item \textbf{Expanded Frequency Range}\\
-          Covers low-power LPDDR through DDR5-6400
-    \item \textbf{Enhanced PHY$\leftrightarrow$MC Interaction}\\
-          Real-time calibration feedback and margining
-  \end{enumerate}
-\end{column}
-
-\begin{column}{0.48\textwidth}
-  \vspace{4pt}
-  {\small\textbf{\color{ddrgreen}Backward Compatibility}}
-  \begin{itemize}\setlength\itemsep{6pt}\small
-    \item Supports DDR through DDR5 and LPDDR through LPDDR5
-    \item One DFI 5.1 MC paired with generation-specific PHY covers every standard
-  \end{itemize}
-  \vspace{8pt}
-  {\small\textbf{\color{ddrred}Why it matters for our MC}}
-  \begin{itemize}\setlength\itemsep{6pt}\small
-    \item Single RTL targets DDR3, DDR4, DDR5 and LPDDR4
-    \item Swapping PHY $=$ different memory standard, same controller
-  \end{itemize}
-\end{column}
-\end{columns}
-\end{frame}
-
 \end{document}
