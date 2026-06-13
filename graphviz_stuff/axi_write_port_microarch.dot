@@ -1,0 +1,43 @@
+digraph AXI_Write_Port {
+
+    rankdir=TB;
+    splines=ortho;
+    nodesep=0.5;
+    ranksep=0.7;
+
+    node [shape=box, style=rounded];
+
+    AW [label="AXI AW Channel"];
+    AW_CAPTURE [label="AW Request\nCapture"];
+    VALIDATOR [label="Write Request\nValidator"];
+    TRACKER [label="Burst State\nTracker"];
+
+    ADDR_GEN [label="Address\nGenerator"];
+    W [label="AXI W Channel"];
+    W_HANDLER [label="W Data\nHandler"];
+
+    SPLITTER [label="Burst\nSplitter"];
+    ROB [label="Response Tracking /\nROB"];
+    B_GEN [label="B Response\nGenerator"];
+    B [label="AXI B Channel"];
+
+    // Main flow
+    AW -> AW_CAPTURE;
+    AW_CAPTURE -> VALIDATOR;
+    VALIDATOR -> TRACKER;
+
+    // Middle stage
+    TRACKER -> ADDR_GEN;
+    TRACKER -> W_HANDLER;
+    ADDR_GEN -> W_HANDLER;
+    W -> W_HANDLER;
+
+    // Downstream
+    W_HANDLER -> SPLITTER;
+    SPLITTER -> ROB;
+    ROB -> B_GEN;
+    B_GEN -> B;
+
+    // Same level
+    {rank=same; ADDR_GEN; W}
+}
