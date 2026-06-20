@@ -3,6 +3,7 @@
 \usepackage{booktabs}
 \usepackage{array}
 \usepackage{tabularx}
+\usepackage{longtable}
 \usepackage{titlesec}
 \usepackage{parskip}
 \usepackage{microtype}
@@ -26,10 +27,38 @@
 
 The Reorder Buffer (ROB) absorbs out-of-order read completions from MC Core and emits them in-order per AXID to Merge Logic. Depth is tied to \texttt{MC\_RD\_BUF = 64}. Since \texttt{RESP\_READY} must always be held high, the ROB can never stall incoming completions — backpressure is instead applied by halting new read requests when occupancy reaches the watermark threshold.
 
-\medskip
-\noindent\textbf{Inputs:} Tag Allocator (\texttt{alloc\_req, AXID, seqnum, tag}); MC Core (\texttt{RESP\_VALID, tag[7:0], data[511:0], status[3:0]})
+\subsection*{Input Signals}
+\begin{longtable}{llll}
+\toprule
+\textbf{Signal} & \textbf{Width} & \textbf{Source} & \textbf{Description} \\
+\midrule
+\texttt{alloc\_req}     & 1   & Tag Allocator & Pulse: allocate a new ROB slot \\
+\texttt{AXID[5:0]}      & 6   & Tag Allocator & AXI ID of transaction being allocated \\
+\texttt{seqnum[1:0]}    & 2   & Tag Allocator & Seqnum of transaction being allocated \\
+\texttt{tag[7:0]}       & 8   & Tag Allocator & Full tag (used to write Lookup Table) \\
+\texttt{RESP\_VALID}    & 1   & MC Core       & Completion valid strobe \\
+\texttt{resp\_type[1:0]}& 2   & MC Core       & 00=RD\_DATA, 01=WR\_ACK, 10=ERR; ROB acts only on RD\_DATA \\
+\texttt{tag[7:0]}       & 8   & MC Core       & Completion tag; \texttt{[7:2]}=AXID, \texttt{[1:0]}=seqnum \\
+\texttt{data[511:0]}    & 512 & MC Core       & Read data payload \\
+\texttt{status[3:0]}    & 4   & MC Core       & Completion status/error code \\
+\bottomrule
+\caption{ROB input signals}
+\end{longtable}
 
-\noindent\textbf{Outputs:} Merge Logic (\texttt{data[511:0], status[3:0], AXID, last\_beat}); Packet FIFO (\texttt{PKT\_READY}); MC Core (\texttt{RESP\_READY} tied high)
+\subsection*{Output Signals}
+\begin{longtable}{llll}
+\toprule
+\textbf{Signal} & \textbf{Width} & \textbf{Destination} & \textbf{Description} \\
+\midrule
+\texttt{data[511:0]}    & 512 & Merge Logic  & In-order read data beat \\
+\texttt{status[3:0]}    & 4   & Merge Logic  & Status for emitted beat \\
+\texttt{AXID[5:0]}      & 6   & Merge Logic  & AXID of emitted beat \\
+\texttt{rob\_last}      & 1   & Merge Logic  & Asserted on final beat of a transaction; sourced from RTT, passed through \\
+\texttt{PKT\_READY}     & 1   & Packet FIFO  & Deasserted when watermark hit; halts new read requests \\
+\texttt{RESP\_READY}    & 1   & MC Core      & Tied high permanently \\
+\bottomrule
+\caption{ROB output signals}
+\end{longtable}
 
 \section{Blocks}
 
@@ -69,7 +98,14 @@ The Reorder Buffer (ROB) absorbs out-of-order read completions from MC Core and 
 
 \subsection{Completion Input}
 \begin{itemize}[noitemsep]
-  \item Receives \texttt{RESP\_VALID, tag[7:0], data[511:0], status[3:0]} from MC Core.
+  \item Receives \texttt{RESP\_VALID, resp\_type[1:0], tag[7:0], data[511:0], status[3:0]}
+        from MC Core.
+  \item \textbf{Filters on \texttt{resp\_type}:} acts only when
+        \texttt{resp\_type == 2'b00} (RD\_DATA). Completions with
+        \texttt{resp\_type == 2'b01} (WR\_ACK) are destined for the Response Tracker
+        and are ignored by the ROB. ERR completions (\texttt{resp\_type == 2'b10}) for
+        read transactions are written into the ROB with the error status preserved so
+        DECERR can be forwarded to the R Response Generator.
   \item Extracts \texttt{AXID = tag[7:2]}, \texttt{seqnum = tag[1:0]}.
   \item Reads \texttt{slot\_idx} from Lookup Table using \texttt{\{AXID, seqnum\}}.
   \item Writes \texttt{data}, \texttt{status}, \texttt{valid=1} to ROB BRAM at \texttt{slot\_idx}.
@@ -78,8 +114,13 @@ The Reorder Buffer (ROB) absorbs out-of-order read completions from MC Core and 
 \subsection{Head Pointer Array}
 \begin{itemize}[noitemsep]
   \item 64 registers of 6 bits each, one per AXID. Stores slot index of next expected beat.
-  \item Written on first allocation: \texttt{head[AXID] = free\_slot\_idx}.
-  \item Advanced by Emit Logic after each emit: incremented to next expected slot.
+  \item Written on first allocation only: \texttt{head[AXID] = free\_slot\_idx} when the
+        AXID has no in-flight slots (occupancy transitions 0\textrightarrow{}1 for that AXID).
+        On subsequent allocations for the same AXID, \texttt{head[AXID]} is \emph{not} updated
+        — it is owned exclusively by Emit Logic from that point forward.
+  \item Advanced by Emit Logic after each emit: incremented to the next expected slot index.
+  \item Reset to the next \texttt{free\_slot\_idx} only when all in-flight slots for an AXID
+        have been emitted and a new allocation arrives (occupancy returns to 0 then rises again).
   \item All 64 head pointers drive the ROB BRAM read port simultaneously each cycle.
 \end{itemize}
 
@@ -87,7 +128,11 @@ The Reorder Buffer (ROB) absorbs out-of-order read completions from MC Core and 
 \begin{itemize}[noitemsep]
   \item Reads \texttt{valid} bits from all 64 head slots out of ROB BRAM each cycle.
   \item Priority encoder selects lowest AXID whose head slot has \texttt{valid=1}.
-  \item On selection: reads \texttt{data} and \texttt{status} from BRAM; emits to Merge Logic.
+  \item On selection: reads \texttt{data} and \texttt{status} from BRAM; emits to Merge Logic
+        along with \texttt{AXID} and \texttt{rob\_last}. \texttt{rob\_last} is \emph{not}
+        generated inside the ROB — it is sourced from the Read Transaction Table (RTT), which
+        asserts it when \texttt{completed\_packets == expected\_packets} for that transaction.
+        The ROB passes it through to Merge Logic coincident with the final data beat.
   \item After emit:
     \begin{itemize}[noitemsep]
       \item Clears \texttt{valid} in BRAM slot.
@@ -178,7 +223,12 @@ Max emissions     & 1 per cycle \\
   \item ROB BRAM has 1-cycle read latency. Emit Logic valid check must be pipelined accordingly — register the read address, use valid bit one cycle after presenting \texttt{head[AXID]}.
   \item Priority encoder across 64 valid bits is the critical path in Emit Logic. May need pipelining at high frequencies.
   \item Allocation and completion can occur in the same cycle — write port (completion) and init write (allocation) are independent BRAM ports.
-  \item \texttt{watermark\_hit} is combinational from the Occupancy Counter — no additional latency before \texttt{PKT\_READY} deasserts.
+  \item \texttt{watermark\_hit} is combinational from the Occupancy Counter — no additional
+        latency before \texttt{PKT\_READY} deasserts.
+  \item Simultaneous \texttt{alloc\_req} and \texttt{free\_req} on the Free List bitmask in
+        the same cycle is safe — they always target different bits (alloc clears the lowest
+        free bit; free sets the bit of the just-emitted slot, which is by definition occupied).
+        No read-modify-write conflict arises.
 \end{itemize}
 
 \end{document}
