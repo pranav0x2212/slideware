@@ -1,0 +1,199 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[a4paper, margin=2.5cm]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{parskip}
+\usepackage{fancyhdr}
+\usepackage{listings}
+
+\definecolor{codegray}{rgb}{0.95,0.95,0.95}
+\lstset{
+  backgroundcolor=\color{codegray},
+  basicstyle=\ttfamily\small,
+  frame=single,
+  framesep=4pt,
+  breaklines=true
+}
+
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{CIF Microarchitecture}
+\lhead{Request Validator}
+\rfoot{\thepage}
+
+\title{\textbf{CIF Microarchitecture Specification}\\[0.4em]
+\large Block: Request Validator}
+\author{CIF Design Team}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{fancy}
+\tableofcontents
+\newpage
+
+% -----------------------------------------------------------------------
+\section{Overview}
+
+The Request Validator is a purely combinational block instantiated once
+each on the read and write paths. It pops entries from the AR or AW
+Metadata FIFO, performs a single runtime check (address range
+validation), and steers the transaction to one of two downstream paths:
+
+\begin{itemize}
+  \item \textbf{Valid path:} Transaction forwarded to the Transaction
+        Tag Allocator with \texttt{REQ\_VALID} asserted.
+  \item \textbf{Error path:} Transaction forwarded to the Error Handler
+        with \texttt{ERR\_VALID} asserted and \texttt{AXID} preserved.
+\end{itemize}
+
+The Request Validator contains no storage, no counters, and no state.
+All protocol-level checks (burst type, WRAP legality, alignment, burst
+length) are enforced as design-time assertions in the verification
+environment only. Compliant AXI4 masters are assumed at runtime.
+
+% -----------------------------------------------------------------------
+\section{Design Parameters}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Parameter} & \textbf{Value} & \textbf{Description} \\
+\midrule
+\texttt{ADDR\_W}  & 32 & Address width in bits \\
+\texttt{AXID\_W}  & 6  & AXI ID width \\
+\texttt{LEN\_W}   & 8  & Burst length field width (ARLEN/AWLEN) \\
+\bottomrule
+\end{tabular}
+\caption{Request Validator parameters}
+\end{table}
+
+% -----------------------------------------------------------------------
+\section{Internal Blocks}
+
+\subsection{Address Range Check}
+
+\begin{itemize}
+  \item \textbf{Type:} Purely combinational.
+  \item \textbf{Input:} \texttt{ADDR[31:0]} from the AR/AW Metadata
+        FIFO.
+  \item \textbf{Function:} Checks whether \texttt{ADDR} falls within
+        the valid memory address range defined at synthesis time.
+  \item \textbf{Output:} \texttt{addr\_ok} (1-bit) — asserted when the
+        address is valid, deasserted on an address error.
+  \item \textbf{Scope:} Address range check only. No burst type, no
+        alignment, no length checks at runtime.
+\end{itemize}
+
+\subsection{Output Mux}
+
+\begin{itemize}
+  \item \textbf{Type:} Purely combinational.
+  \item \textbf{Function:} Routes the transaction to the correct
+        downstream block based on \texttt{addr\_ok}.
+  \item \textbf{Valid path} (\texttt{addr\_ok == 1}): asserts
+        \texttt{REQ\_VALID} to the Tag Allocator; forwards
+        \texttt{AXID[5:0]} and \texttt{ARLEN/AWLEN[7:0]}.
+  \item \textbf{Error path} (\texttt{addr\_ok == 0}): asserts
+        \texttt{ERR\_VALID} to the Error Handler; forwards
+        \texttt{AXID[5:0]}.
+  \item Only one output path is active per transaction. Both paths are
+        never asserted simultaneously.
+\end{itemize}
+
+% -----------------------------------------------------------------------
+\section{Interface Signals}
+
+\subsection{Inputs}
+
+\begin{longtable}{llll}
+\toprule
+\textbf{Signal} & \textbf{Width} & \textbf{Source} & \textbf{Description} \\
+\midrule
+\texttt{ADDR[31:0]}        & 32 & AR/AW Metadata FIFO & Transaction address \\
+\texttt{AXID[5:0]}         & 6  & AR/AW Metadata FIFO & AXI ID \\
+\texttt{ARLEN/AWLEN[7:0]}  & 8  & AR/AW Metadata FIFO & Burst length \\
+\texttt{STALL}             & 1  & Tag Allocator       & Per-AXID stall; holds output until deasserted \\
+\bottomrule
+\caption{Request Validator input signals}
+\end{longtable}
+
+\subsection{Outputs}
+
+\begin{longtable}{llll}
+\toprule
+\textbf{Signal} & \textbf{Width} & \textbf{Destination} & \textbf{Description} \\
+\midrule
+\texttt{REQ\_VALID}       & 1 & Tag Allocator & Valid transaction request \\
+\texttt{AXID[5:0]}        & 6 & Tag Allocator & Forwarded AXI ID \\
+\texttt{ARLEN/AWLEN[7:0]} & 8 & Tag Allocator & Forwarded burst length \\
+\texttt{ERR\_VALID}       & 1 & Error Handler & Address error notification \\
+\texttt{AXID[5:0]}        & 6 & Error Handler & AXI ID preserved for NOP tag allocation \\
+\bottomrule
+\caption{Request Validator output signals}
+\end{longtable}
+
+% -----------------------------------------------------------------------
+\section{Functional Behaviour}
+
+\begin{enumerate}
+  \item Request Validator pops the head entry from the AR/AW Metadata
+        FIFO: \texttt{ADDR[31:0]}, \texttt{AXID[5:0]},
+        \texttt{ARLEN/AWLEN[7:0]}.
+  \item Address Range Check evaluates \texttt{addr\_ok} combinationally.
+  \item If \texttt{addr\_ok == 1} and \texttt{STALL} is deasserted:
+        Output Mux asserts \texttt{REQ\_VALID} to the Tag Allocator
+        with \texttt{AXID} and \texttt{ARLEN/AWLEN}.
+  \item If \texttt{addr\_ok == 0}: Output Mux asserts \texttt{ERR\_VALID}
+        to the Error Handler with \texttt{AXID}. The Error Handler sets
+        \texttt{pkt\_type = Err\_write / Err\_read} and injects the
+        transaction into the normal pipeline via the Tag Allocator.
+  \item If \texttt{STALL} is asserted (Tag Allocator full for this
+        AXID): the Request Validator holds its outputs stable and does
+        not pop the next FIFO entry until \texttt{STALL} deasserts.
+\end{enumerate}
+
+% -----------------------------------------------------------------------
+\section{Timing Notes}
+
+\begin{itemize}
+  \item Fully combinational. Output (\texttt{REQ\_VALID} or
+        \texttt{ERR\_VALID}) is valid in the same cycle as the FIFO
+        head entry is presented.
+  \item \texttt{STALL} from the Tag Allocator is also combinational —
+        the combined path (FIFO output → Address Range Check → Output
+        Mux → Tag Allocator Stall Logic → STALL back) is a
+        combinational loop that must be timed carefully. A register
+        stage may be inserted between the Request Validator output and
+        the Tag Allocator input if timing closure requires it, at the
+        cost of one cycle of allocation latency.
+\end{itemize}
+
+% -----------------------------------------------------------------------
+\section{Edge Cases}
+
+\begin{itemize}
+  \item \textbf{Error path stall:} An address error transaction still
+        consumes a Tag Allocator slot. If the AXID is at maximum
+        outstanding (\texttt{STALL} asserted), the error path is also
+        held. \texttt{ERR\_VALID} is not asserted until \texttt{STALL}
+        deasserts.
+  \item \textbf{Protocol violations:} Illegal burst type, unaligned
+        WRAP, and maximum burst length violations are not checked at
+        runtime. They are enforced as design-time assertions in the
+        verification environment. A non-compliant master will cause
+        undefined behaviour.
+  \item \textbf{Simultaneous valid and error:} Not possible —
+        \texttt{addr\_ok} is a single-bit result; exactly one output
+        path is active per transaction.
+\end{itemize}
+
+\end{document}
