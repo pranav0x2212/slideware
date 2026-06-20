@@ -1,0 +1,304 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[a4paper, margin=2.5cm]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{parskip}
+\usepackage{fancyhdr}
+\usepackage{listings}
+
+\definecolor{codegray}{rgb}{0.95,0.95,0.95}
+\lstset{
+  backgroundcolor=\color{codegray},
+  basicstyle=\ttfamily\small,
+  frame=single,
+  framesep=4pt,
+  breaklines=true
+}
+
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{CIF Microarchitecture}
+\lhead{Read Transaction Table}
+\rfoot{\thepage}
+
+\title{\textbf{CIF Microarchitecture Specification}\\[0.4em]
+\large Block: Read Transaction Table (RTT)}
+\author{CIF Design Team}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{fancy}
+\tableofcontents
+\newpage
+
+% -----------------------------------------------------------------------
+\section{Overview}
+
+The Read Transaction Table (RTT) is a per-transaction tracking structure
+for the read path. It is allocated at tag assignment time and tracks
+completion progress for every outstanding read transaction. When all
+expected packets for a transaction have been received from MC Core,
+the RTT asserts \texttt{rob\_last}, signalling the final beat to the
+ROB and Merge Logic. The entry is freed in the same cycle.
+
+The RTT operates independently of the ROB — both blocks tap the same
+MC Core completion bus, but serve different purposes: the ROB stores
+and reorders data; the RTT tracks transaction-level progress and drives
+\texttt{rob\_last}.
+
+% -----------------------------------------------------------------------
+\section{Design Parameters}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Parameter} & \textbf{Value} & \textbf{Description} \\
+\midrule
+\texttt{AXID\_W}         & 6   & AXI ID width \\
+\texttt{SEQNUM\_W}       & 2   & Seqnum width \\
+\texttt{TXN\_TAG\_W}     & 8   & Tag width = AXID\_W + SEQNUM\_W \\
+\texttt{RTT\_DEPTH}      & 256 & Entries = $2^{\texttt{AXID\_W} + \texttt{SEQNUM\_W}}$ \\
+\texttt{EXP\_PKTS\_W}    & 8   & Expected packets width (covers ARLEN+1, max 256) \\
+\texttt{CMP\_PKTS\_W}    & 8   & Completed packets counter width \\
+\bottomrule
+\end{tabular}
+\caption{RTT parameters}
+\end{table}
+
+% -----------------------------------------------------------------------
+\section{Internal Blocks}
+
+\subsection{RTT Register File}
+
+\begin{itemize}
+  \item \textbf{Structure:} 256-entry register file. Each entry stores:
+  \begin{itemize}
+    \item \texttt{AXID[5:0]} — AXI ID of the transaction
+    \item \texttt{exp\_pkts[7:0]} — expected packet count (= \texttt{ARLEN+1})
+    \item \texttt{cmp\_pkts[7:0]} — completed packet count (incremented on each MC Core completion)
+  \end{itemize}
+  \item \textbf{Addressing:} \texttt{addr[7:0] = TXN\_TAG[7:0] = \{AXID[5:0], seqnum[1:0]\}}.
+        The tag directly indexes the register file — no translation required.
+  \item \textbf{Write ports:}
+  \begin{itemize}
+    \item Alloc Write Logic writes \texttt{exp\_pkts} on allocation.
+    \item Completion Update Logic increments \texttt{cmp\_pkts} on each
+          \texttt{RD\_DATA} completion.
+    \item Free Logic clears the entry (zeroes \texttt{cmp\_pkts}, invalidates)
+          on \texttt{rob\_last}.
+  \end{itemize}
+  \item \textbf{Read port:} Continuously exposes \texttt{cmp\_pkts} and
+        \texttt{exp\_pkts} to Compare Logic.
+\end{itemize}
+
+\subsection{Alloc Write Logic}
+
+\begin{itemize}
+  \item Activated on \texttt{TAG\_VALID} from the Tag Allocator.
+  \item Receives \texttt{TXN\_TAG[7:0]} and \texttt{ARLEN[7:0]}.
+  \item Computes \texttt{exp\_pkts = ARLEN + 1}.
+  \item Issues \texttt{write\_en} to the RTT Register File at address
+        \texttt{TXN\_TAG[7:0]}, writing \texttt{exp\_pkts} and
+        initialising \texttt{cmp\_pkts = 0}.
+\end{itemize}
+
+\subsection{Completion Update Logic}
+
+\begin{itemize}
+  \item Taps the MC Core completion bus: \texttt{RESP\_VALID},
+        \texttt{resp\_type[1:0]}, \texttt{tag[7:0]}.
+  \item \textbf{Filter:} acts only when \texttt{resp\_type == 2'b00}
+        (RD\_DATA). WR\_ACK completions (\texttt{resp\_type == 2'b01})
+        are destined for the Response Tracker and are ignored. ERR
+        completions for read transactions (\texttt{resp\_type == 2'b10})
+        are treated as a valid completion event — \texttt{cmp\_pkts} is
+        still incremented so the transaction reaches \texttt{rob\_last}
+        and completes normally; error status propagation is handled by
+        the ROB and R Response Generator.
+  \item Asserts \texttt{inc\_en} to the RTT Register File at address
+        \texttt{tag[7:0]}, incrementing \texttt{cmp\_pkts} by 1.
+\end{itemize}
+
+\subsection{Compare Logic}
+
+\begin{itemize}
+  \item Purely combinational.
+  \item Reads \texttt{cmp\_pkts[7:0]} and \texttt{exp\_pkts[7:0]} from
+        the RTT Register File for the entry currently being updated.
+  \item Asserts \texttt{rob\_last} as a one-cycle pulse when
+        \texttt{cmp\_pkts == exp\_pkts}.
+  \item \texttt{rob\_last} is forwarded to two destinations
+        simultaneously: Free Logic (to clear the entry) and the ROB
+        (passed through to Merge Logic coincident with the final data
+        beat).
+\end{itemize}
+
+\subsection{Free Logic}
+
+\begin{itemize}
+  \item Activated by \texttt{rob\_last} from Compare Logic.
+  \item Asserts \texttt{clear\_en} to the RTT Register File at address
+        \texttt{tag[7:0]}, clearing the entry in the same cycle as
+        \texttt{rob\_last}.
+  \item Simultaneously asserts \texttt{RD\_FREE\_VALID} and drives
+        \texttt{RD\_FREE\_TAG[7:0]} to the Tag Allocator's RD\_FREE
+        port, triggering occupancy decrement for the freed AXID.
+\end{itemize}
+
+% -----------------------------------------------------------------------
+\section{Interface Signals}
+
+\subsection{Inputs}
+
+\begin{longtable}{llll}
+\toprule
+\textbf{Signal} & \textbf{Width} & \textbf{Source} & \textbf{Description} \\
+\midrule
+\texttt{TXN\_TAG[7:0]}    & 8 & Tag Allocator & Allocated tag; indexes the register file \\
+\texttt{ARLEN[7:0]}       & 8 & Tag Allocator & Burst length; \texttt{exp\_pkts = ARLEN+1} \\
+\texttt{TAG\_VALID}       & 1 & Tag Allocator & Allocation strobe \\
+\texttt{RESP\_VALID}      & 1 & MC Core       & Completion valid \\
+\texttt{resp\_type[1:0]}  & 2 & MC Core       & 00=RD\_DATA, 01=WR\_ACK, 10=ERR; RTT acts on RD\_DATA and ERR \\
+\texttt{tag[7:0]}         & 8 & MC Core       & Completion tag; used as register file address \\
+\bottomrule
+\caption{RTT input signals}
+\end{longtable}
+
+\subsection{Outputs}
+
+\begin{longtable}{llll}
+\toprule
+\textbf{Signal} & \textbf{Width} & \textbf{Destination} & \textbf{Description} \\
+\midrule
+\texttt{rob\_last}          & 1 & ROB / Merge Logic             & Pulse on final packet of a transaction \\
+\texttt{RD\_FREE\_VALID}    & 1 & Tag Allocator (RD\_FREE port) & Free strobe; coincident with \texttt{rob\_last} \\
+\texttt{RD\_FREE\_TAG[7:0]} & 8 & Tag Allocator (RD\_FREE port) & Tag being freed \\
+\bottomrule
+\caption{RTT output signals}
+\end{longtable}
+
+% -----------------------------------------------------------------------
+\section{Internal Signal Table}
+
+\begin{longtable}{lllll}
+\toprule
+\textbf{Signal} & \textbf{Width} & \textbf{From} & \textbf{To} & \textbf{Description} \\
+\midrule
+\texttt{write\_en}        & 1   & Alloc Write Logic       & RTT Reg File         & Write strobe on allocation \\
+\texttt{wr\_addr[7:0]}    & 8   & Alloc Write Logic       & RTT Reg File         & = \texttt{TXN\_TAG[7:0]} \\
+\texttt{exp\_pkts[7:0]}   & 8   & Alloc Write Logic       & RTT Reg File         & = \texttt{ARLEN+1} \\
+\texttt{inc\_en}          & 1   & Completion Update Logic & RTT Reg File         & Increment \texttt{cmp\_pkts} strobe \\
+\texttt{inc\_addr[7:0]}   & 8   & Completion Update Logic & RTT Reg File         & = \texttt{tag[7:0]} from MC Core \\
+\texttt{cmp\_pkts[7:0]}   & 8   & RTT Reg File            & Compare Logic        & Current completed count \\
+\texttt{exp\_pkts[7:0]}   & 8   & RTT Reg File            & Compare Logic        & Expected count (read port) \\
+\texttt{rob\_last}        & 1   & Compare Logic           & Free Logic, ROB      & One-cycle pulse on final completion \\
+\texttt{clear\_en}        & 1   & Free Logic              & RTT Reg File         & Clear entry strobe \\
+\texttt{clear\_addr[7:0]} & 8   & Free Logic              & RTT Reg File         & = \texttt{tag[7:0]} of completing txn \\
+\bottomrule
+\caption{RTT internal signals}
+\end{longtable}
+
+% -----------------------------------------------------------------------
+\section{Functional Behaviour}
+
+\subsection{Allocation Flow}
+
+\begin{enumerate}
+  \item Tag Allocator asserts \texttt{TAG\_VALID} with \texttt{TXN\_TAG[7:0]}
+        and \texttt{ARLEN[7:0]}.
+  \item Alloc Write Logic computes \texttt{exp\_pkts = ARLEN + 1}.
+  \item RTT Register File is written at address \texttt{TXN\_TAG[7:0]}:
+        \texttt{exp\_pkts} is stored, \texttt{cmp\_pkts} is initialised
+        to zero.
+\end{enumerate}
+
+\subsection{Completion Flow}
+
+\begin{enumerate}
+  \item MC Core asserts \texttt{RESP\_VALID} with \texttt{resp\_type == 2'b00}
+        (RD\_DATA) and \texttt{tag[7:0]}.
+  \item Completion Update Logic asserts \texttt{inc\_en} at address
+        \texttt{tag[7:0]}: \texttt{cmp\_pkts} is incremented by 1.
+  \item Compare Logic reads the updated \texttt{cmp\_pkts} and
+        \texttt{exp\_pkts} combinationally.
+  \item If \texttt{cmp\_pkts == exp\_pkts}: \texttt{rob\_last} is
+        asserted as a one-cycle pulse.
+\end{enumerate}
+
+\subsection{Free Flow}
+
+\begin{enumerate}
+  \item \texttt{rob\_last} pulse triggers Free Logic in the same cycle.
+  \item Free Logic asserts \texttt{clear\_en} to the RTT Register File:
+        the entry is invalidated.
+  \item Free Logic simultaneously asserts \texttt{RD\_FREE\_VALID} with
+        \texttt{RD\_FREE\_TAG} to the Tag Allocator, decrementing the
+        occupancy counter for the freed AXID.
+\end{enumerate}
+
+\subsection{rob\_last Routing}
+
+\texttt{rob\_last} is a sideband signal to Merge Logic. It travels in
+parallel with, not through, the ROB. The ROB emits
+\texttt{data[511:0]}, \texttt{status[3:0]}, and \texttt{AXID[5:0]} to
+Merge Logic; the RTT emits \texttt{rob\_last} to Merge Logic
+coincident with the final data beat. Merge Logic combines both to
+assert \texttt{RLAST} on the AXI R channel. There is no feedback path
+from the RTT into the ROB's internal logic.
+
+% -----------------------------------------------------------------------
+\section{Timing Notes}
+
+\begin{itemize}
+  \item Alloc Write Logic is registered: the register file write takes
+        effect on the cycle following \texttt{TAG\_VALID}.
+  \item Completion Update Logic is registered: \texttt{cmp\_pkts}
+        increment takes effect on the cycle following \texttt{RESP\_VALID}.
+  \item Compare Logic is combinational: \texttt{rob\_last} is available
+        in the same cycle as the \texttt{cmp\_pkts} update is visible.
+        In practice this means \texttt{rob\_last} appears one cycle
+        after the final \texttt{RESP\_VALID}.
+  \item Free Logic fires in the same cycle as \texttt{rob\_last}:
+        the register file entry is cleared and \texttt{RD\_FREE\_VALID}
+        is asserted without additional latency.
+  \item Simultaneous allocation and completion on the same tag are not
+        possible by construction — a tag is only allocated after its
+        previous occupancy slot is freed, and a completion can only
+        arrive for an in-flight tag.
+\end{itemize}
+
+% -----------------------------------------------------------------------
+\section{Edge Cases}
+
+\begin{itemize}
+  \item \textbf{Single-beat transaction (ARLEN = 0):} \texttt{exp\_pkts = 1}.
+        \texttt{rob\_last} is asserted on the first and only completion.
+        Handled identically to multi-beat transactions.
+  \item \textbf{Error completion:} \texttt{resp\_type == 2'b10} (ERR)
+        for a read transaction is treated as a valid completion event.
+        \texttt{cmp\_pkts} is incremented normally so the transaction
+        progresses to \texttt{rob\_last}. Error status is stored in the
+        ROB slot and forwarded to the R Response Generator as DECERR.
+        The RTT does not need to distinguish error from normal
+        completions.
+  \item \textbf{WR\_ACK completions:} \texttt{resp\_type == 2'b01}
+        completions are ignored by the RTT entirely. They are processed
+        by the Response Tracker on the write path.
+  \item \textbf{Over-completion protection:} \texttt{cmp\_pkts} must
+        never exceed \texttt{exp\_pkts}. This is guaranteed by
+        construction since MC Core returns exactly one completion per
+        issued read packet. A design-time assertion should be included
+        in the verification environment.
+\end{itemize}
+
+\end{document}
