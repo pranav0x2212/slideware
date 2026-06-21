@@ -28,7 +28,7 @@
 The Reorder Buffer (ROB) absorbs out-of-order read completions from MC Core and emits them in-order per AXID to Merge Logic. Depth is tied to \texttt{MC\_RD\_BUF = 64}. Since \texttt{RESP\_READY} must always be held high, the ROB can never stall incoming completions — backpressure is instead applied by halting new read requests when occupancy reaches the watermark threshold.
 
 \subsection*{Input Signals}
-\begin{longtable}{llll}
+\begin{longtable}{p{3cm}p{1cm}p{3cm}p{7cm}}
 \toprule
 \textbf{Signal} & \textbf{Width} & \textbf{Source} & \textbf{Description} \\
 \midrule
@@ -46,7 +46,7 @@ The Reorder Buffer (ROB) absorbs out-of-order read completions from MC Core and 
 \end{longtable}
 
 \subsection*{Output Signals}
-\begin{longtable}{llll}
+\begin{longtable}{p{3cm}p{1cm}p{3cm}p{7cm}}
 \toprule
 \textbf{Signal} & \textbf{Width} & \textbf{Destination} & \textbf{Description} \\
 \midrule

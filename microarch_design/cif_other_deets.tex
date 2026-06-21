@@ -12,6 +12,7 @@
 \usepackage{multirow}
 \usepackage{makecell}
 \usepackage{caption}
+\usepackage{pdflscape}
 
 \hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue}
 
@@ -53,9 +54,9 @@ Handshake types used below:
 %-----------------------------------------------------------------------------
 \subsection{AXI Slave Interface (AXI Master $\rightarrow$ CIF)}
 %-----------------------------------------------------------------------------
-
+\begin{landscape}
 \keepXColumns
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -99,7 +100,7 @@ Handshake types used below:
 \subsection{Write Path: AW Metadata FIFO $\rightarrow$ Request Validator}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -116,7 +117,7 @@ Handshake types used below:
 \subsection{Write Path: Request Validator $\rightarrow$ Tag Allocator / Error Handler}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -133,7 +134,7 @@ Handshake types used below:
 \subsection{Write Path: Error Handler $\rightarrow$ Tag Allocator}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -146,7 +147,7 @@ Handshake types used below:
 \subsection{Shared: Tag Allocator $\rightarrow$ Burst Splitter}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -160,7 +161,7 @@ Handshake types used below:
 \subsection{Shared: Tag Allocator $\rightarrow$ Response Tracker / RTT}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -182,7 +183,7 @@ Handshake types used below:
 \subsection{Shared: Burst Splitter $\rightarrow$ Packet Formation Unit (Write)}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -200,7 +201,7 @@ Handshake types used below:
 \subsection{Write Path: W Data FIFO $\rightarrow$ Packet Formation Unit}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -214,7 +215,7 @@ Handshake types used below:
 \subsection{Write Path: Packet Formation Unit $\rightarrow$ Write Packet FIFO}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -227,7 +228,7 @@ Handshake types used below:
 \subsection{Write Path: Write Packet FIFO $\rightarrow$ MC Core}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -241,7 +242,7 @@ Handshake types used below:
 \subsection{Write Path: Response Tracker $\rightarrow$ B Response Generator}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -255,7 +256,7 @@ Handshake types used below:
 \subsection{Write Path: Response Tracker $\rightarrow$ Tag Allocator (Free)}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -268,7 +269,7 @@ Handshake types used below:
 \subsection{Read Path: AR Metadata FIFO $\rightarrow$ Request Validator}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -285,7 +286,7 @@ Handshake types used below:
 \subsection{Read Path: Request Validator $\rightarrow$ Tag Allocator / Error Handler}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -302,7 +303,7 @@ Handshake types used below:
 \subsection{Read Path: Error Handler $\rightarrow$ Tag Allocator}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -315,7 +316,7 @@ Handshake types used below:
 \subsection{Shared: Burst Splitter $\rightarrow$ Packet Formation Unit (Read)}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -333,7 +334,7 @@ Handshake types used below:
 \subsection{Read Path: Packet Formation Unit $\rightarrow$ Read Packet FIFO}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -346,7 +347,7 @@ Handshake types used below:
 \subsection{Read Path: Read Packet FIFO $\rightarrow$ MC Core}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -360,7 +361,7 @@ Handshake types used below:
 \subsection{MC Core Completion Interface (MC Core $\rightarrow$ CIF)}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -377,7 +378,7 @@ Handshake types used below:
 \subsection{Read Path: ROB $\rightarrow$ Merge Logic}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -392,7 +393,7 @@ Handshake types used below:
 \subsection{Read Path: RTT $\rightarrow$ ROB / Merge Logic}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -407,7 +408,7 @@ Handshake types used below:
 \subsection{Read Path: Merge Logic $\rightarrow$ R Response Generator}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -422,7 +423,7 @@ Handshake types used below:
 \subsection{ROB Backpressure Control}
 %-----------------------------------------------------------------------------
 
-\begin{tabularx}{\textwidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{2.0cm} X}
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
 \toprule
 \textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
 \midrule
@@ -430,6 +431,7 @@ Handshake types used below:
 \texttt{PKT\_READY}     & 1 & out & ROB             & Read Pkt FIFO   & Level & Deasserted when \texttt{watermark\_hit} high; halts new read requests to MC Core \\
 \bottomrule
 \end{tabularx}
+\end{landscape}
 
 \newpage
 %=============================================================================
@@ -775,7 +777,7 @@ consistent with the normal write path.
 \subsection{Timing Summary}
 
 \begin{center}
-\begin{tabular}{lcc}
+\begin{tabularx}{\textwidth}{L{8cm}cc}
 \toprule
 \textbf{Stage} & \textbf{Write Error Latency} & \textbf{Read Error Latency} \\
 \midrule
@@ -789,7 +791,7 @@ Final completion → BRESP/RRESP (no split) & 1 cycle (Emit Logic reg.) & 0 (ROB
 \midrule
 \textbf{Total CIF-internal latency (no split, no stall)} & $\mathbf{3 + L_{MC}}$ \textbf{cycles} & $\mathbf{2 + L_{MC}}$ \textbf{cycles} \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{center}
 
 \end{document}
