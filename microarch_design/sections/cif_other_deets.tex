@@ -1,0 +1,760 @@
+%=============================================================================
+\section{Interface Signal Table}
+%=============================================================================
+
+This section enumerates every signal crossing a block boundary within the CIF.
+Signals are grouped by boundary in pipeline order: AXI slave interface first,
+then write path, then read path, then shared blocks, then the CIF--MC~Core
+interface.
+
+Handshake types used below:
+\begin{itemize}
+  \item \textbf{VALID/READY} --- standard AXI4 handshake; transfer occurs when both asserted.
+  \item \textbf{VALID/READY (tied)} --- READY permanently high; transfer occurs on VALID.
+  \item \textbf{Pulse} --- single-cycle strobe, no handshake.
+  \item \textbf{Level} --- combinational or registered level signal, no handshake.
+  \item \textbf{FIFO push/pop} --- implicit handshake via FIFO full/empty flags.
+\end{itemize}
+
+%-----------------------------------------------------------------------------
+\subsection{AXI Slave Interface (AXI Master $\rightarrow$ CIF)}
+%-----------------------------------------------------------------------------
+\begin{landscape}
+\keepXColumns
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{AWID[5:0]}     & 6   & in  & AXI Master & AW Meta FIFO & VALID/READY & Write transaction ID \\
+\texttt{AWADDR[31:0]}  & 32  & in  & AXI Master & AW Meta FIFO & VALID/READY & Write address \\
+\texttt{AWLEN[7:0]}    & 8   & in  & AXI Master & AW Meta FIFO & VALID/READY & Burst length minus 1 \\
+\texttt{AWSIZE[2:0]}   & 3   & in  & AXI Master & AW Meta FIFO & VALID/READY & Transfer size \\
+\texttt{AWBURST[1:0]}  & 2   & in  & AXI Master & AW Meta FIFO & VALID/READY & Burst type (INCR/WRAP) \\
+\texttt{AWVALID}       & 1   & in  & AXI Master & AW Meta FIFO & VALID/READY & AW channel valid \\
+\texttt{AWREADY}       & 1   & out & AW Meta FIFO & AXI Master  & VALID/READY & AW channel ready; deasserted when client slot full \\
+\midrule
+\texttt{WDATA[511:0]}  & 512 & in  & AXI Master & W Data FIFO  & VALID/READY & Write data \\
+\texttt{WSTRB[63:0]}   & 64  & in  & AXI Master & W Data FIFO  & VALID/READY & Write byte strobes \\
+\texttt{WLAST}         & 1   & in  & AXI Master & W Data FIFO  & VALID/READY & Last beat of burst \\
+\texttt{WVALID}        & 1   & in  & AXI Master & W Data FIFO  & VALID/READY & W channel valid \\
+\texttt{WREADY}        & 1   & out & W Data FIFO  & AXI Master  & VALID/READY & W channel ready; deasserted when FIFO full \\
+\midrule
+\texttt{BVALID}        & 1   & out & B Resp Gen  & AXI Master  & VALID/READY & B channel valid \\
+\texttt{BREADY}        & 1   & in  & AXI Master  & B Resp Gen  & VALID/READY & B channel ready \\
+\texttt{BRESP[1:0]}    & 2   & out & B Resp Gen  & AXI Master  & VALID/READY & Write response (OKAY/DECERR) \\
+\texttt{BID[5:0]}      & 6   & out & B Resp Gen  & AXI Master  & VALID/READY & Write response ID \\
+\midrule
+\texttt{ARID[5:0]}     & 6   & in  & AXI Master & AR Meta FIFO & VALID/READY & Read transaction ID \\
+\texttt{ARADDR[31:0]}  & 32  & in  & AXI Master & AR Meta FIFO & VALID/READY & Read address \\
+\texttt{ARLEN[7:0]}    & 8   & in  & AXI Master & AR Meta FIFO & VALID/READY & Burst length minus 1 \\
+\texttt{ARSIZE[2:0]}   & 3   & in  & AXI Master & AR Meta FIFO & VALID/READY & Transfer size \\
+\texttt{ARBURST[1:0]}  & 2   & in  & AXI Master & AR Meta FIFO & VALID/READY & Burst type (INCR/WRAP) \\
+\texttt{ARVALID}       & 1   & in  & AXI Master & AR Meta FIFO & VALID/READY & AR channel valid \\
+\texttt{ARREADY}       & 1   & out & AR Meta FIFO & AXI Master & VALID/READY & AR channel ready; deasserted when client slot full \\
+\midrule
+\texttt{RVALID}        & 1   & out & R Resp Gen  & AXI Master  & VALID/READY & R channel valid \\
+\texttt{RREADY}        & 1   & in  & AXI Master  & R Resp Gen  & VALID/READY & R channel ready \\
+\texttt{RDATA[511:0]}  & 512 & out & R Resp Gen  & AXI Master  & VALID/READY & Read data \\
+\texttt{RRESP[1:0]}    & 2   & out & R Resp Gen  & AXI Master  & VALID/READY & Read response (OKAY/DECERR) \\
+\texttt{RID[5:0]}      & 6   & out & R Resp Gen  & AXI Master  & VALID/READY & Read response ID \\
+\texttt{RLAST}         & 1   & out & R Resp Gen  & AXI Master  & VALID/READY & Last beat of read burst \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Write Path: AW Metadata FIFO $\rightarrow$ Request Validator}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{AWADDR[31:0]}  & 32 & out & AW Meta FIFO & Req Validator & FIFO pop & Write address from FIFO head \\
+\texttt{AWID[5:0]}     & 6  & out & AW Meta FIFO & Req Validator & FIFO pop & AXI ID from FIFO head \\
+\texttt{AWLEN[7:0]}    & 8  & out & AW Meta FIFO & Req Validator & FIFO pop & Burst length from FIFO head \\
+\texttt{AWSIZE[2:0]}   & 3  & out & AW Meta FIFO & Req Validator & FIFO pop & Transfer size from FIFO head \\
+\texttt{AWBURST[1:0]}  & 2  & out & AW Meta FIFO & Req Validator & FIFO pop & Burst type from FIFO head \\
+\texttt{STALL}         & 1  & in  & Tag Allocator & Req Validator & Level & Per-AXID stall; Req Validator holds pop when asserted \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Write Path: Request Validator $\rightarrow$ Tag Allocator / Error Handler}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{REQ\_VALID}      & 1 & out & Req Validator & Tag Allocator & Pulse & Valid transaction; address check passed \\
+\texttt{AXID[5:0]}       & 6 & out & Req Validator & Tag Allocator & Pulse & AXI ID of valid request \\
+\texttt{AWLEN[7:0]}      & 8 & out & Req Validator & Tag Allocator & Pulse & Burst length of valid request \\
+\midrule
+\texttt{ERR\_VALID}      & 1 & out & Req Validator & Error Handler  & Pulse & Address error notification \\
+\texttt{AXID[5:0]}       & 6 & out & Req Validator & Error Handler  & Pulse & AXI ID preserved for NOP tag allocation \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Write Path: Error Handler $\rightarrow$ Tag Allocator}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{REQ\_VALID}    & 1 & out & Error Handler & Tag Allocator & Pulse & NOP allocation request; \texttt{pkt\_type} pre-set to \texttt{Err\_write} \\
+\texttt{AXID[5:0]}     & 6 & out & Error Handler & Tag Allocator & Pulse & AXI ID for NOP tag allocation \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Shared: Tag Allocator $\rightarrow$ Burst Splitter}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{TXN\_TAG[7:0]} & 8 & out & Tag Allocator & Burst Splitter & Pulse & Allocated tag; \texttt{[7:2]}=AXID, \texttt{[1:0]}=seqnum \\
+\texttt{TAG\_VALID}    & 1 & out & Tag Allocator & Burst Splitter & Pulse & Tag output valid; registered, valid cycle after \texttt{alloc\_en} \\
+\texttt{STALL}         & 1 & out & Tag Allocator & Req Validator / Error Handler & Level & Per-AXID stall; asserted when \texttt{occupancy[AXID]==4} \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Shared: Tag Allocator $\rightarrow$ Response Tracker / RTT}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{TXN\_TAG[7:0]} & 8 & out & Tag Allocator & Resp Tracker   & Pulse & Allocated write tag; indexes Response Tracker register file \\
+\texttt{AWLEN[7:0]}    & 8 & out & Tag Allocator & Resp Tracker   & Pulse & Write burst length; \texttt{exp\_pkts = AWLEN+1} \\
+\texttt{TAG\_VALID}    & 1 & out & Tag Allocator & Resp Tracker   & Pulse & Allocation strobe to Response Tracker \\
+\midrule
+\texttt{TXN\_TAG[7:0]} & 8 & out & Tag Allocator & RTT            & Pulse & Allocated read tag; indexes RTT register file \\
+\texttt{ARLEN[7:0]}    & 8 & out & Tag Allocator & RTT            & Pulse & Read burst length; \texttt{exp\_pkts = ARLEN+1} \\
+\texttt{TAG\_VALID}    & 1 & out & Tag Allocator & RTT            & Pulse & Allocation strobe to RTT \\
+\midrule
+\texttt{alloc\_req}    & 1 & out & Tag Allocator & ROB            & Pulse & ROB slot allocation request, coincident with read \texttt{TAG\_VALID} \\
+\texttt{AXID[5:0]}     & 6 & out & Tag Allocator & ROB            & Pulse & AXI ID for ROB slot allocation \\
+\texttt{seqnum[1:0]}   & 2 & out & Tag Allocator & ROB            & Pulse & Seqnum for ROB lookup table write \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Shared: Burst Splitter $\rightarrow$ Packet Formation Unit (Write)}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{pkt\_valid}      & 1  & out & Burst Splitter & Write PFU & VALID/READY & Normalized beat context valid \\
+\texttt{pkt\_ready}      & 1  & in  & Write PFU      & Burst Splitter & VALID/READY & Downstream ready; holds Emit FSM when low \\
+\texttt{addr[31:0]}      & 32 & out & Burst Splitter & Write PFU & VALID/READY & Per-beat write address \\
+\texttt{TXN\_TAG[7:0]}   & 8  & out & Burst Splitter & Write PFU & VALID/READY & Transaction tag \\
+\texttt{pkt\_type[1:0]}  & 2  & out & Burst Splitter & Write PFU & VALID/READY & \texttt{00}=Write, \texttt{10}=Err\_write; carried unchanged from Stage~1 \\
+\texttt{last\_beat}      & 1  & out & Burst Splitter & Write PFU & VALID/READY & Final beat of sub-transaction \\
+\texttt{s1\_busy}        & 1  & out & Burst Splitter & AW Meta FIFO & Level & Stalls Stage~1 FIFO pop during EMIT~B state \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Write Path: W Data FIFO $\rightarrow$ Packet Formation Unit}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{WDATA[511:0]}  & 512 & out & W Data FIFO & Write PFU & FIFO pop & Write data beat \\
+\texttt{WSTRB[63:0]}   & 64  & out & W Data FIFO & Write PFU & FIFO pop & Byte enable strobes \\
+\texttt{WLAST}         & 1   & out & W Data FIFO & Write PFU & FIFO pop & Last beat flag \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Write Path: Packet Formation Unit $\rightarrow$ Write Packet FIFO}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{PKT\_DATA[617:0]} & 618 & out & Write PFU & Write Pkt FIFO & FIFO push & Serialized 618-bit write packet: \texttt{\{wrapper, data, addr, txn\_tag, pkt\_type\}} \\
+\texttt{PKT\_VALID}       & 1   & out & Write PFU & Write Pkt FIFO & FIFO push & Packet push strobe \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Write Path: Write Packet FIFO $\rightarrow$ MC Core}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{PKT\_DATA[617:0]} & 618 & out & Write Pkt FIFO & MC Core & VALID/READY & Serialized write packet \\
+\texttt{PKT\_VALID}       & 1   & out & Write Pkt FIFO & MC Core & VALID/READY & Packet valid \\
+\texttt{PKT\_READY}       & 1   & in  & MC Core        & Write Pkt FIFO & VALID/READY & MC Core ready to accept; backpressure propagates upstream \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Write Path: Response Tracker $\rightarrow$ B Response Generator}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{BRESP\_VALID}  & 1 & out & Resp Tracker & B Resp Gen & Pulse & BRESP ready to emit; asserted cycle after \texttt{txn\_done} evaluated \\
+\texttt{BID[5:0]}      & 6 & out & Resp Tracker & B Resp Gen & Pulse & AXI ID recovered from \texttt{head\_tag[7:2]} \\
+\texttt{BRESP[1:0]}    & 2 & out & Resp Tracker & B Resp Gen & Pulse & OKAY if \texttt{err\_sticky==0}; DECERR if \texttt{err\_sticky==1} \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Write Path: Response Tracker $\rightarrow$ Tag Allocator (Free)}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{WR\_FREE\_VALID}   & 1 & out & Resp Tracker & Tag Allocator & Pulse & Write slot free strobe; coincident with BRESP emission \\
+\texttt{WR\_FREE\_TAG[7:0]} & 8 & out & Resp Tracker & Tag Allocator & Pulse & Tag being freed; \texttt{[7:2]}=AXID for occupancy decrement \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Read Path: AR Metadata FIFO $\rightarrow$ Request Validator}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{ARADDR[31:0]}  & 32 & out & AR Meta FIFO & Req Validator & FIFO pop & Read address from FIFO head \\
+\texttt{ARID[5:0]}     & 6  & out & AR Meta FIFO & Req Validator & FIFO pop & AXI ID from FIFO head \\
+\texttt{ARLEN[7:0]}    & 8  & out & AR Meta FIFO & Req Validator & FIFO pop & Burst length from FIFO head \\
+\texttt{ARSIZE[2:0]}   & 3  & out & AR Meta FIFO & Req Validator & FIFO pop & Transfer size from FIFO head \\
+\texttt{ARBURST[1:0]}  & 2  & out & AR Meta FIFO & Req Validator & FIFO pop & Burst type from FIFO head \\
+\texttt{STALL}         & 1  & in  & Tag Allocator & Req Validator & Level & Per-AXID stall; Req Validator holds pop when asserted \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Read Path: Request Validator $\rightarrow$ Tag Allocator / Error Handler}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{REQ\_VALID}    & 1 & out & Req Validator & Tag Allocator & Pulse & Valid read request; address check passed \\
+\texttt{AXID[5:0]}     & 6 & out & Req Validator & Tag Allocator & Pulse & AXI ID of valid read request \\
+\texttt{ARLEN[7:0]}    & 8 & out & Req Validator & Tag Allocator & Pulse & Burst length of valid read request \\
+\midrule
+\texttt{ERR\_VALID}    & 1 & out & Req Validator & Error Handler  & Pulse & Address error notification \\
+\texttt{AXID[5:0]}     & 6 & out & Req Validator & Error Handler  & Pulse & AXI ID preserved for NOP tag allocation \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Read Path: Error Handler $\rightarrow$ Tag Allocator}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{REQ\_VALID}    & 1 & out & Error Handler & Tag Allocator & Pulse & NOP allocation request; \texttt{pkt\_type} pre-set to \texttt{Err\_read} \\
+\texttt{AXID[5:0]}     & 6 & out & Error Handler & Tag Allocator & Pulse & AXI ID for NOP tag allocation \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Shared: Burst Splitter $\rightarrow$ Packet Formation Unit (Read)}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{pkt\_valid}      & 1  & out & Burst Splitter & Read PFU  & VALID/READY & Normalized beat context valid \\
+\texttt{pkt\_ready}      & 1  & in  & Read PFU       & Burst Splitter & VALID/READY & Downstream ready \\
+\texttt{addr[31:0]}      & 32 & out & Burst Splitter & Read PFU  & VALID/READY & Per-beat read address \\
+\texttt{TXN\_TAG[7:0]}   & 8  & out & Burst Splitter & Read PFU  & VALID/READY & Transaction tag \\
+\texttt{pkt\_type[1:0]}  & 2  & out & Burst Splitter & Read PFU  & VALID/READY & \texttt{01}=Read, \texttt{11}=Err\_read \\
+\texttt{last\_beat}      & 1  & out & Burst Splitter & Read PFU  & VALID/READY & Final beat of sub-transaction \\
+\texttt{s1\_busy}        & 1  & out & Burst Splitter & AR Meta FIFO & Level & Stalls Stage~1 FIFO pop during EMIT~B state \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Read Path: Packet Formation Unit $\rightarrow$ Read Packet FIFO}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{PKT\_DATA[41:0]} & 42 & out & Read PFU & Read Pkt FIFO & FIFO push & Serialized 42-bit read packet: \texttt{\{addr, txn\_tag, pkt\_type\}} \\
+\texttt{PKT\_VALID}      & 1  & out & Read PFU & Read Pkt FIFO & FIFO push & Packet push strobe \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Read Path: Read Packet FIFO $\rightarrow$ MC Core}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{PKT\_DATA[41:0]} & 42 & out & Read Pkt FIFO & MC Core & VALID/READY & Serialized read request packet \\
+\texttt{PKT\_VALID}      & 1  & out & Read Pkt FIFO & MC Core & VALID/READY & Packet valid \\
+\texttt{PKT\_READY}      & 1  & in  & MC Core       & Read Pkt FIFO & VALID/READY & MC Core ready; deasserted by ROB watermark \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{MC Core Completion Interface (MC Core $\rightarrow$ CIF)}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{RESP\_VALID}     & 1   & in  & MC Core & ROB / Resp Tracker / RTT & VALID/READY (tied) & Completion valid \\
+\texttt{RESP\_READY}     & 1   & out & CIF     & MC Core & VALID/READY (tied) & Tied permanently high; CIF never stalls MC Core completions \\
+\texttt{resp\_type[1:0]} & 2   & in  & MC Core & ROB / Resp Tracker / RTT & VALID/READY (tied) & \texttt{00}=RD\_DATA (→ROB, RTT), \texttt{01}=WR\_ACK (→Resp Tracker), \texttt{10}=ERR \\
+\texttt{tag[7:0]}        & 8   & in  & MC Core & ROB / Resp Tracker / RTT & VALID/READY (tied) & Completion tag; \texttt{[7:2]}=AXID, \texttt{[1:0]}=seqnum \\
+\texttt{data[511:0]}     & 512 & in  & MC Core & ROB & VALID/READY (tied) & Read data; valid only when \texttt{resp\_type==00} \\
+\texttt{status[3:0]}     & 4   & in  & MC Core & ROB / Resp Tracker & VALID/READY (tied) & Status/error code; encoding TBD with MC team \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Read Path: ROB $\rightarrow$ Merge Logic}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{data[511:0]}   & 512 & out & ROB & Merge Logic & VALID/READY & In-order read data beat emitted by Emit Logic \\
+\texttt{status[3:0]}   & 4   & out & ROB & Merge Logic & VALID/READY & Status for emitted beat \\
+\texttt{AXID[5:0]}     & 6   & out & ROB & Merge Logic & VALID/READY & AXID of emitted beat \\
+\texttt{rob\_last}     & 1   & out & RTT (via ROB) & Merge Logic & VALID/READY & Final beat of transaction; sourced from RTT, passed through ROB coincident with final data beat \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Read Path: RTT $\rightarrow$ ROB / Merge Logic}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{rob\_last}      & 1 & out & RTT & ROB / Merge Logic & Pulse & One-cycle pulse on final MC Core completion for a transaction; \texttt{cmp\_pkts == exp\_pkts} \\
+\midrule
+\texttt{RD\_FREE\_VALID}   & 1 & out & RTT & Tag Allocator & Pulse & Read slot free strobe; coincident with \texttt{rob\_last} \\
+\texttt{RD\_FREE\_TAG[7:0]} & 8 & out & RTT & Tag Allocator & Pulse & Tag being freed; \texttt{[7:2]}=AXID for occupancy decrement \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{Read Path: Merge Logic $\rightarrow$ R Response Generator}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{RDATA[511:0]}  & 512 & out & Merge Logic & R Resp Gen & VALID/READY & Ordered read data beat \\
+\texttt{RID[5:0]}      & 6   & out & Merge Logic & R Resp Gen & VALID/READY & AXI ID recovered from \texttt{txn\_tag[7:2]} \\
+\texttt{status[3:0]}   & 4   & out & Merge Logic & R Resp Gen & VALID/READY & Beat status; drives DECERR when error \\
+\texttt{RLAST}         & 1   & out & Merge Logic & R Resp Gen & VALID/READY & Last beat flag derived from \texttt{rob\_last} \\
+\bottomrule
+\end{tabularx}
+
+%-----------------------------------------------------------------------------
+\subsection{ROB Backpressure Control}
+%-----------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{L{3.0cm} C{0.8cm} C{1.0cm} L{2.2cm} L{2.2cm} L{3.4cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Dir} & \textbf{From} & \textbf{To} & \textbf{Handshake} & \textbf{Description} \\
+\midrule
+\texttt{watermark\_hit} & 1 & out & ROB Occ Counter & PKT\_READY ctrl & Level & Asserted when occupancy $\geq$ 38; combinational from counter \\
+\texttt{PKT\_READY}     & 1 & out & ROB             & Read Pkt FIFO   & Level & Deasserted when \texttt{watermark\_hit} high; halts new read requests to MC Core \\
+\bottomrule
+\end{tabularx}
+\end{landscape}
+
+\newpage
+%=============================================================================
+\section{Arbitration Policy}
+%=============================================================================
+
+\subsection{Overview}
+
+Two blocks in CIF are shared across all $N\_CLIENTS = 32$ AXI clients: the
+\textbf{Transaction Tag Allocator} and the \textbf{Burst Splitter}. Both sit on
+the common request path after the per-path Request Validators. This section
+defines how access to these shared resources is arbitrated.
+
+No other block requires explicit arbitration. The AR and AW Metadata FIFOs are
+partitioned statically (4~slots per client); the ROB, RTT, and Response Tracker
+are indexed directly by \texttt{txn\_tag} and require no arbitration. The
+completion path from MC~Core is a single bus fanned out to the ROB, RTT, and
+Response Tracker simultaneously, with each block filtering on
+\texttt{resp\_type} --- no arbiter required.
+
+\subsection{Transaction Tag Allocator}
+
+The Tag Allocator is a single shared instance serving both read and write
+paths.
+
+\subsubsection*{Arbitration Mechanism}
+
+The Tag Allocator accepts exactly one allocation request per cycle.
+Upstream priority is resolved as follows:
+
+\begin{enumerate}
+  \item \textbf{Write path} and \textbf{read path} requests arrive at the Tag
+        Allocator from their respective Request Validators (or Error Handlers).
+        In CIF~v1, write and read paths share the Burst Splitter sequentially
+        (single pipeline); the upstream MUX feeding the Tag Allocator selects
+        between write-path and read-path requests using \textbf{fixed
+        priority, write $>$ read}. If both paths present a request in the same
+        cycle, the write-path request is accepted; the read-path request is held
+        for the next cycle.
+  \item Within a single path, only one AXID is presented per cycle (the FIFO
+        head entry). No further arbitration is required at this level.
+\end{enumerate}
+
+\subsubsection*{Per-AXID Stall}
+
+Allocation for a given AXID is blocked when
+\texttt{occupancy[AXID] == MAX\_OUTSTANDING} (4). The Stall Logic asserts
+\texttt{STALL} combinationally to the upstream block for that specific AXID
+only. Other AXIDs are unaffected. \texttt{STALL} is released in the cycle
+after the occupancy counter decrements (i.e., cycle $N+1$ after
+\texttt{WR\_FREE\_VALID} or \texttt{RD\_FREE\_VALID} fires for a tag belonging
+to that AXID).
+
+\subsubsection*{Error Path}
+
+The Error Handler presents allocation requests using the same interface as the
+Request Validator (\texttt{REQ\_VALID}, \texttt{AXID}). Error-path allocations
+are subject to the same per-AXID stall and write/read priority rules. No
+bypass or priority elevation is granted to error transactions.
+
+\subsubsection*{Simultaneous Free and Allocate}
+
+If \texttt{alloc\_en} and \texttt{dec\_occ} fire in the same cycle for the
+same AXID (one slot freed while a new one is being allocated), the occupancy
+counter holds constant (net-zero change). This is a valid steady-state
+operating condition and requires no special handling.
+
+\subsection{Burst Splitter}
+
+The Burst Splitter is a single shared two-stage pipeline instance serving both
+read and write paths across all clients.
+
+\subsubsection*{Arbitration Mechanism}
+
+Access to the Burst Splitter is implicitly arbitrated by the upstream MUX that
+feeds the Tag Allocator. Since the Tag Allocator and Burst Splitter are driven
+from the same upstream MUX with the same priority policy (write $>$ read,
+one request per cycle), the Burst Splitter processes exactly one transaction
+at a time.
+
+\subsubsection*{Pipeline Stall Policy}
+
+The Burst Splitter Emit FSM stalls Stage~1 (via \texttt{s1\_busy}) during
+\textsc{EMIT~B} to prevent the next FIFO entry from being consumed while the
+second sub-transaction of a split is being emitted. \texttt{s1\_busy} is
+deasserted on the cycle the FSM returns to \textsc{IDLE}. Backpressure from
+downstream (\texttt{pkt\_ready = 0}) holds the FSM in its current state;
+\texttt{s1\_busy} remains asserted until \textsc{IDLE} is reached.
+
+\subsubsection*{Tag Allocator Stall Folding}
+
+If the Tag Allocator asserts \texttt{STALL} before Stage~1 can proceed, the
+stall is folded into \texttt{s1\_busy}. Stage~1 does not advance until
+\texttt{STALL} deasserts and a valid tag is available.
+
+\subsubsection*{Throughput}
+
+Under no-split, no-stall conditions the Burst Splitter achieves one
+transaction per cycle. A row-boundary split costs one additional cycle per
+transaction (EMIT~A + EMIT~B). WRAP bursts iterate over the pre-computed
+\texttt{beat\_addrs[]} table; throughput is one beat per cycle per WRAP
+address, plus one additional cycle if a row-boundary split is also required.
+
+\newpage
+%=============================================================================
+\section{Reset and Initialization Sequence}
+%=============================================================================
+
+\subsection{Overview}
+
+CIF supports two reset modes:
+
+\begin{itemize}
+  \item \textbf{Power-on reset (POR):} Asserted by the FPGA fabric on
+        configuration. All flip-flops and BRAM init values take effect. CIF
+        remains in reset until the AXI interconnect and MC~Core are both ready.
+  \item \textbf{Soft reset:} Driven by a register write from a management
+        plane. Must drain the pipeline before asserting; returns CIF to the same
+        state as POR without reconfiguring the FPGA.
+\end{itemize}
+
+All resets are \textbf{synchronous, active-high}, qualified on
+\texttt{posedge clk}. There is no asynchronous reset path in CIF.
+
+\subsection{Reset Signal}
+
+\begin{tabularx}{\textwidth}{L{2.5cm} C{0.8cm} L{3cm} X}
+\toprule
+\textbf{Signal} & \textbf{W} & \textbf{Source} & \textbf{Description} \\
+\midrule
+\texttt{rst\_n} & 1 & FPGA top / mgmt plane & Active-low synchronous reset; asserted low to reset all CIF blocks \\
+\bottomrule
+\end{tabularx}
+
+\subsection{Power-On Reset Sequence}
+
+The following sequence describes the required initialization order.
+Steps within the same numbered stage may proceed in parallel.
+
+\begin{enumerate}
+  \item \textbf{Assert \texttt{rst\_n = 0}.}
+        All registered state is cleared synchronously on the next
+        \texttt{posedge clk}:
+        \begin{itemize}
+          \item AR/AW Metadata FIFO and W Data FIFO: empty, \texttt{ARREADY / AWREADY / WREADY = 0}.
+          \item Write and Read Packet FIFOs: empty.
+          \item Tag Allocator: all 64 occupancy counters $\leftarrow$ 0; all 64 seqnum counters $\leftarrow$ 0.
+          \item Response Tracker register file: all entries cleared (\texttt{cmp\_pkts = 0}, \texttt{err\_sticky = 0}, \texttt{exp\_pkts = 0}).
+          \item Response Tracker head pointer array: all 64 entries $\leftarrow$ 0.
+          \item RTT register file: all 256 entries cleared.
+          \item ROB BRAM: all 64 slots \texttt{valid = 0}.
+          \item ROB free list: all 64 bits $\leftarrow$ 1 (all slots free).
+          \item ROB lookup table: all 256 entries $\leftarrow$ 0.
+          \item ROB head pointer array: all 64 registers $\leftarrow$ 0.
+          \item ROB occupancy counter $\leftarrow$ 0.
+          \item Burst Splitter Emit FSM $\leftarrow$ \textsc{IDLE}; all internal state registers cleared.
+          \item Request Validators: combinational; no state to clear.
+          \item Error Handlers: no persistent state to clear.
+          \item \texttt{RESP\_READY} driven high immediately (tied; no reset dependency).
+        \end{itemize}
+
+  \item \textbf{Wait for MC~Core ready.}
+        CIF must not issue any packets until MC~Core signals it is ready to
+        accept traffic. \texttt{PKT\_VALID} must be held low (Packet FIFOs are
+        empty during reset; no additional gating required if FIFOs reset
+        correctly).
+
+  \item \textbf{Deassert \texttt{rst\_n = 1}.}
+        On the first \texttt{posedge clk} after deassertion:
+        \begin{itemize}
+          \item \texttt{AWREADY} and \texttt{ARREADY} are driven based on
+                per-client FIFO slot availability. Both are high immediately
+                after reset since all FIFO slots are free.
+          \item \texttt{WREADY} is driven high immediately (W Data FIFO empty).
+          \item The Tag Allocator begins accepting allocation requests.
+          \item The Burst Splitter Emit FSM begins processing from
+                \textsc{IDLE}.
+        \end{itemize}
+
+  \item \textbf{AXI traffic may begin.}
+        First valid AXI transaction is accepted on the cycle after
+        \texttt{AWREADY / ARREADY} are high and the AXI master presents a
+        valid request.
+\end{enumerate}
+
+\subsection{Soft Reset Sequence}
+
+Soft reset must be preceded by a pipeline drain to avoid losing in-flight
+transactions.
+
+\begin{enumerate}
+  \item \textbf{Quiesce upstream.}
+        The management plane instructs all AXI masters to stop issuing new
+        transactions. New \texttt{AWVALID} and \texttt{ARVALID} are withheld.
+
+  \item \textbf{Drain the request pipeline.}
+        Wait until:
+        \begin{itemize}
+          \item AR and AW Metadata FIFOs are empty.
+          \item W Data FIFO is empty.
+          \item Write and Read Packet FIFOs are empty.
+          \item Burst Splitter Emit FSM is in \textsc{IDLE}.
+          \item Tag Allocator: all 64 occupancy counters $= 0$ (no in-flight transactions).
+        \end{itemize}
+
+  \item \textbf{Drain the completion pipeline.}
+        Wait until:
+        \begin{itemize}
+          \item ROB occupancy counter $= 0$ (all read completions have been
+                emitted to Merge Logic).
+          \item Response Tracker: all 256 register file entries clear
+                (\texttt{cmp\_pkts == exp\_pkts} and freed, or all
+                \texttt{exp\_pkts == 0}).
+          \item RTT: all 256 entries clear.
+          \item No pending \texttt{BRESP} or \texttt{RRESP} outstanding on the
+                AXI B or R channels.
+        \end{itemize}
+
+  \item \textbf{Assert \texttt{rst\_n = 0}.}
+        Proceed identically to steps 1--4 of the power-on reset sequence.
+
+\end{enumerate}
+
+\subsection{BRAM Initialization Note}
+
+The ROB BRAM \texttt{valid} bits are the only BRAM state that must be
+explicitly initialized. On the cycle \texttt{rst\_n} deasserts, all 64
+\texttt{valid} bits must read as 0. This is achieved by:
+\begin{itemize}
+  \item Using a synchronous-reset flip-flop for each \texttt{valid} bit
+        (implemented as distributed RAM or shadow registers alongside the BRAM
+        data), \textbf{or}
+  \item Performing a 64-cycle initialization write loop on the BRAM write port
+        during reset, setting \texttt{valid = 0} at each address before
+        \texttt{rst\_n} deasserts.
+\end{itemize}
+The second option requires holding \texttt{rst\_n} low for at least 64 cycles
+after POR. This is the recommended approach for UltraScale BRAM inference.
+
+\newpage
+%=============================================================================
+\section{Error Propagation Timing}
+%=============================================================================
+
+\subsection{Overview}
+
+Address errors detected by the Request Validator are propagated through the
+normal CIF pipeline as NOP packets using \texttt{pkt\_type[1:0] = 10}
+(\texttt{Err\_write}) or \texttt{11} (\texttt{Err\_read}). This section traces
+the cycle-by-cycle timing of \texttt{pkt\_type} from error detection to AXI
+error response, and identifies where \texttt{pkt\_type} is set, carried, and
+consumed. Timing counts assume no stalls unless noted.
+
+\subsection{Write Path Error Propagation}
+
+\begin{center}
+\begin{tabular}{clL{9cm}}
+\toprule
+\textbf{Cycle} & \textbf{Stage} & \textbf{Event} \\
+\midrule
+$N$   & Request Validator & Address Range Check evaluates \texttt{addr\_ok = 0} combinationally. \texttt{ERR\_VALID} asserted to Error Handler; \texttt{AXID} forwarded. AW Metadata FIFO entry is consumed (popped) in this cycle. \\
+$N$   & Error Handler     & Error Handler sets \texttt{pkt\_type = Err\_write} and presents \texttt{REQ\_VALID} + \texttt{AXID} to Tag Allocator in the same cycle. \\
+$N+1$ & Tag Allocator     & \texttt{alloc\_en} fires (assuming no \texttt{STALL}). \texttt{TXN\_TAG} and \texttt{TAG\_VALID} registered; valid on cycle $N+1$. Occupancy counter and seqnum counter update take effect on cycle $N+1$. \\
+$N+1$ & Burst Splitter Stage~1 & \texttt{pkt\_type = Err\_write} enters Stage~1 alongside \texttt{TXN\_TAG}, \texttt{ADDR}, \texttt{AXLEN}, \texttt{AXSIZE}. Stage~1 computes split decision combinationally; pipeline register clocked on cycle $N+1$. \\
+$N+2$ & Burst Splitter Stage~2 & Emit FSM enters \textsc{EMIT~A}. \texttt{pkt\_type} carried unchanged through Sub-txn~A mux. Both sub-transactions (if split) carry the same \texttt{pkt\_type = Err\_write}. \\
+$N+2$ & Packet Formation Unit & Write PFU assembles 618-bit packet with \texttt{pkt\_type[1:0] = 10} in bits [1:0]. \texttt{data[511:0]} and \texttt{wrapper[63:0]} are taken from the W Data FIFO as-is; no drain or discard. \\
+$N+2$ & Write Packet FIFO & Packet pushed into FIFO. \\
+$N+2 + F_W$ & MC Core & \texttt{Err\_write} packet dequeued from Write Packet FIFO and issued to MC Core (\texttt{PKT\_VALID} asserted). $F_W$ = Write Packet FIFO occupancy delay (0 under no backpressure). MC~Core discards write data; returns error completion (\texttt{resp\_type = 10}) on the completion bus. \\
+$N+2 + F_W + L_{MC}$ & Response Tracker & MC~Core asserts \texttt{RESP\_VALID} with \texttt{resp\_type = 10}. Completion Update Logic increments \texttt{cmp\_pkts} and sets \texttt{err\_sticky = 1}. Compare Logic evaluates \texttt{cmp\_pkts == exp\_pkts} combinationally (true on this cycle for a single-packet error transaction). \texttt{txn\_done} pulses. \\
+$N+3 + F_W + L_{MC}$ & B Response Generator & Emit Logic (registered) drives \texttt{BRESP\_VALID}, \texttt{BID}, and \texttt{BRESP = DECERR} to B Response Generator on the cycle after \texttt{txn\_done}. \texttt{BVALID} is asserted on the AXI B channel. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+$L_{MC}$ denotes MC~Core's internal latency from packet receipt to error
+completion assertion. This is a MC~Core parameter and is not constrained by
+CIF.
+
+\textbf{Key invariant:} \texttt{pkt\_type} is set once (at the Error Handler
+output, cycle $N$) and carried unchanged through the S1$\rightarrow$S2 pipeline
+register and Sub-txn muxes. Neither the Burst Splitter nor the PFU inspect or
+modify \texttt{pkt\_type}. Both sub-transactions of a split carry the same
+\texttt{pkt\_type}.
+
+\subsection{Read Path Error Propagation}
+
+\begin{center}
+\begin{tabular}{clL{9cm}}
+\toprule
+\textbf{Cycle} & \textbf{Stage} & \textbf{Event} \\
+\midrule
+$N$   & Request Validator & \texttt{addr\_ok = 0} combinationally. \texttt{ERR\_VALID} asserted to Error Handler; \texttt{AXID} forwarded. AR Metadata FIFO entry consumed. \\
+$N$   & Error Handler     & \texttt{pkt\_type = Err\_read} set. \texttt{REQ\_VALID} + \texttt{AXID} presented to Tag Allocator. \\
+$N+1$ & Tag Allocator     & \texttt{TXN\_TAG} and \texttt{TAG\_VALID} registered and valid. ROB slot allocated via \texttt{alloc\_req}. RTT entry allocated via \texttt{TAG\_VALID} path with \texttt{exp\_pkts = ARLEN+1}. \\
+$N+1$ & Burst Splitter Stage~1 & \texttt{pkt\_type = Err\_read} enters Stage~1; pipeline register clocked. \\
+$N+2$ & Burst Splitter Stage~2 & Emit FSM emits beat(s) with \texttt{pkt\_type = Err\_read} unchanged. \\
+$N+2$ & Packet Formation Unit & Read PFU assembles 42-bit packet with \texttt{pkt\_type[1:0] = 11} in bits [1:0]. No data field in read packets. \\
+$N+2$ & Read Packet FIFO  & Packet pushed into FIFO. \\
+$N+2 + F_R$ & MC Core & \texttt{Err\_read} packet issued to MC~Core. MC~Core returns error completion (\texttt{resp\_type = 10}) with no data. \\
+$N+2 + F_R + L_{MC}$ & ROB & Completion Input writes \texttt{status} and \texttt{valid = 1} to the allocated ROB slot with error status preserved. RTT: \texttt{cmp\_pkts} incremented; \texttt{rob\_last} pulses (single-beat transaction). \\
+$N+2 + F_R + L_{MC}$ & Merge Logic & Emit Logic emits slot to Merge Logic with \texttt{status} indicating error. \texttt{rob\_last} forwarded simultaneously. \\
+$N+3 + F_R + L_{MC}$ & R Response Generator & \texttt{RVALID} asserted with \texttt{RRESP = DECERR}, \texttt{RID} recovered from \texttt{tag[7:2]}, \texttt{RLAST = 1}. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Split Transaction Error Propagation}
+
+When an error transaction also requires a row-boundary split
+(\texttt{split\_needed = 1}), both sub-transactions carry the same
+\texttt{pkt\_type}. The implications are:
+
+\begin{itemize}
+  \item \textbf{Write path:} Both \texttt{Err\_write} packets are issued to
+        MC~Core. MC~Core returns one error completion per packet. The Response
+        Tracker increments \texttt{cmp\_pkts} on each completion; \texttt{err\_sticky}
+        is set on the first. \texttt{txn\_done} fires only after both
+        completions arrive (\texttt{cmp\_pkts == exp\_pkts}).
+        \texttt{BRESP = DECERR} is emitted once, covering the entire
+        transaction.
+  \item \textbf{Read path:} Both \texttt{Err\_read} packets are issued to
+        MC~Core. MC~Core returns one error completion per packet (no data).
+        The RTT increments \texttt{cmp\_pkts} on each; \texttt{rob\_last}
+        fires after the second. The ROB emits two slots (both with error
+        status); Merge Logic forwards both to the R Response Generator.
+        \texttt{RLAST} is asserted on the final beat; both beats carry
+        \texttt{RRESP = DECERR}.
+  \item \textbf{Cycle cost of split:} EMIT~B adds one cycle to the Burst
+        Splitter stage (Stage~2 holds \texttt{s1\_busy} for one additional
+        cycle). All downstream stages (PFU, FIFO, MC~Core, response path) are
+        otherwise unaffected by the split.
+\end{itemize}
+
+\subsection{Err\_write W Beat Handling}
+
+W beats for an \texttt{Err\_write} transaction flow through the W Data FIFO
+and Write PFU without modification or draining. The \texttt{pkt\_type} field in
+the assembled packet signals to MC~Core that the data is invalid; MC~Core
+discards the payload. No special W-beat gating or bypass path exists in CIF.
+The number of W beats consumed by the PFU is determined by \texttt{AWLEN},
+consistent with the normal write path.
+
+\subsection{Timing Summary}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{L{8cm}cc}
+\toprule
+\textbf{Stage} & \textbf{Write Error Latency} & \textbf{Read Error Latency} \\
+\midrule
+Req Validator → Error Handler & 0 (combinational) & 0 (combinational) \\
+Error Handler → Tag Allocator output & 1 cycle & 1 cycle \\
+Tag Allocator → Burst Splitter S2 output & 1 cycle & 1 cycle \\
+Burst Splitter S2 → Packet FIFO push & 0 (same cycle) & 0 (same cycle) \\
+Packet FIFO → MC Core (no backpressure) & 0 & 0 \\
+MC Core latency & $L_{MC}$ & $L_{MC}$ \\
+Final completion → BRESP/RRESP (no split) & 1 cycle (Emit Logic reg.) & 0 (ROB emit + Merge Logic) \\
+\midrule
+\textbf{Total CIF-internal latency (no split, no stall)} & $\mathbf{3 + L_{MC}}$ \textbf{cycles} & $\mathbf{2 + L_{MC}}$ \textbf{cycles} \\
+\bottomrule
+\end{tabularx}
+\end{center}

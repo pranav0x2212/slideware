@@ -1,0 +1,386 @@
+% ─────────────────────────────────────────────
+\section{Overview}
+
+The Controller Interface (CIF) is the AXI-facing front-end of the memory subsystem. It translates AXI4 read and write transactions into normalized, fixed-width packets suitable for MC Core processing. The CIF handles burst splitting, transaction tagging, packet formation, response tracking, and in-order AXI response generation. MC Core remains transaction-agnostic and operates purely on a per-packet basis.
+
+\subsection{Global Assumptions}
+
+\begin{itemize}[noitemsep]
+    \item AXI4 protocol.
+    \item Data width: 512 bits (64 bytes). Parameterizable via RTL.
+    \item Address width: 32 bits (FPGA initial configuration). Parameterizable.
+    \item AXID width: 6 bits (64 unique AXI IDs).
+    \item Supported burst types: INCR and WRAP. FIXED not supported.
+    \item Multiple outstanding transactions supported per AXID (up to 4).
+    \item Maximum burst length: 256 beats (AXI4 maximum).
+    \item Narrow INCR and unaligned INCR transfers supported.
+    \item Narrow WRAP and unaligned WRAP transfers not supported.
+    \item Out-of-order (OoO) completions from MC Core are supported and resolved within CIF.
+    \item Protocol violations (illegal burst type, unaligned WRAP, etc.) are design-time assertions only. Runtime validation is limited to address legality checks.
+\end{itemize}
+
+% ─────────────────────────────────────────────
+\section{Parameters}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llll}
+\toprule
+\textbf{Parameter} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\texttt{AXID\_W}         & 6     & AXI ID width. Supports up to $2^6 = 64$ unique IDs. \\
+\texttt{ADDR\_W}         & 32    & Address width in bits. \\
+\texttt{DATA\_W}         & 512   & Data path width in bits. \\
+\texttt{N\_AR}           & 128   & AR Metadata FIFO depth ($= 4 \times \texttt{N\_CLIENTS}$). \\
+\texttt{N\_AW}           & 128   & AW Metadata FIFO depth ($= 4 \times \texttt{N\_CLIENTS}$). \\
+\texttt{N\_W}            & 64    & W Data FIFO depth. \\
+\texttt{N\_PKT}          & 64    & Packet FIFO depth (read and write). \\
+\texttt{MC\_RD\_BUF}     & 64    & MC Core internal read buffer depth. Defines ROB depth. \\
+\texttt{ROB\_WATERMARK}  & 26    & MC-side watermark for backpressure signalling. \\
+\texttt{MAX\_OUTSTANDING}& 4     & Maximum outstanding transactions per AXID. \\
+\texttt{N\_CLIENTS}      & 32    & AXI client count. Fixed at compile time (max 32). \\
+\midrule
+\multicolumn{3}{l}{\small All parameters are configurable at synthesis time.} \\
+\bottomrule
+\end{tabular}
+\caption{CIF Global Parameters}
+\end{table}
+
+\textbf{Note on N\_CLIENTS.} The number of AXI clients is fixed at synthesis time. Each client is statically allocated \texttt{MAX\_OUTSTANDING = 4} slots in the AR and AW metadata FIFOs, giving \texttt{N\_AR = N\_AW = 4 $\times$ N\_CLIENTS}. Idle clients retain their allocated slots; dynamic reallocation across clients is deferred to a future CIF revision.
+
+% ─────────────────────────────────────────────
+\section{Write Path}
+
+\subsection{Overview}
+
+The write path accepts AXI write transactions on the AW and W channels, validates them, splits bursts into normalized 64-byte packets, and forwards them to MC Core. Per-packet completions are tracked and aggregated to generate a single AXI B channel response per transaction.
+
+\subsection{Block Descriptions}
+
+\textbf{AW Metadata FIFO (depth = N\_AW = $4 \times$ N\_CLIENTS).}
+Captures and buffers incoming AW channel metadata: \texttt{AWADDR}, \texttt{AWLEN}, \texttt{AWSIZE}, \texttt{AWBURST}, \texttt{AWID}. Decouples AXI request arrival from downstream validation and scheduling. Each AXI client is statically allocated 4 slots. \texttt{AWREADY} is driven low when no slots are available for the requesting client.
+
+\textbf{W Data FIFO (depth = N\_W).}
+Captures and buffers AXI write data beats: \texttt{WDATA}, \texttt{WSTRB}, \texttt{WLAST}. Operates independently of the AW channel. W beats flow in freely regardless of AW validation status.
+
+\textbf{Request Validator.}
+Pops entries from the AW Metadata FIFO and performs address legality checks combinationally:
+\begin{itemize}[noitemsep]
+    \item Address range validation.
+\end{itemize}
+Protocol-level constraints (burst type, WRAP legality, alignment, burst length) are enforced as design-time assertions and are not checked at runtime — compliant AXI masters are assumed. Valid requests are forwarded to the Transaction Tag Allocator. Address errors are forwarded to the Error Handler along with \texttt{AWID}.
+
+\textbf{Transaction Tag Allocator.}
+Shared across all \texttt{N\_CLIENTS} AXI clients. Allocates a unique \texttt{txn\_tag} per validated transaction:
+\begin{lstlisting}
+txn_tag[7:0] = AXID[5:0] + seqnum[1:0]
+seqnum: monotonically increasing per AXID, wraps at 4
+\end{lstlisting}
+Accepts inputs from both the Request Validator (valid requests) and the Error Handler (NOP transactions). Seqnum allocation is blocked when all 4 outstanding slots for an AXID are occupied. Tags are freed when the Response Tracker emits a BRESP for the corresponding transaction.
+
+\textbf{Burst Splitter (two-stage pipeline).}
+Shared across all \texttt{N\_CLIENTS} AXI clients. Converts validated AXI burst requests into normalized beat-level packets.
+\begin{itemize}[noitemsep]
+    \item \textit{Stage 1 — Row Boundary Split:} Splits bursts such that no sub-transaction crosses a DRAM row boundary. Generates row-confined sub-transactions.
+    \item \textit{Stage 2 — Command Alignment \& Packetization:} Aligns packets to memory-command boundaries. Generates byte-enable wrapper masks for partial or edge-aligned packets.
+\end{itemize}
+Internal state: \texttt{base\_addr}, \texttt{beat\_idx}, \texttt{beats\_left}, \texttt{burst\_type}, \texttt{burst\_len}, \texttt{txn\_tag}.
+
+\textbf{Packet Formation Unit.}
+Assembles normalized 618-bit write packets:
+\begin{lstlisting}
+pkt_type   [1:0]      2 bits  (00=Write, 01=Read, 10=Err_write, 11=Err_read)
+txn_tag    [9:2]      8 bits
+addr       [41:10]   32 bits
+data       [553:42] 512 bits
+wrapper    [617:554]  64 bits  (1 bit = 1 byte validity)
+Total: 618 bits
+\end{lstlisting}
+One AXI beat maps directly to one normalized packet. No beat accumulation required.
+
+\textbf{Packet FIFO (depth = N\_PKT).}
+Buffers normalized write packets before transfer to MC Core. Provides decoupling between CIF packet generation rate and MC Core processing rate.
+
+\textbf{Response Tracker.}
+Shared across all \texttt{N\_CLIENTS} AXI clients. Tracks outstanding write transactions on a per-tag basis. Stores: \texttt{txn\_tag}, \texttt{AXID} (recovered as \texttt{txn\_tag[7:2]}), \texttt{expected\_packets} (from \texttt{AWLEN+1}), \texttt{completed\_packets}, \texttt{status}. Emits a single \texttt{BRESP} when:
+\begin{lstlisting}
+completed_packets == expected_packets
+\end{lstlisting}
+On receiving an error status from MC Core (corresponding to an \texttt{Err\_write} packet), passes \texttt{DECERR} to the B Response Generator.
+
+\textbf{B Response Generator.}
+Drives the AXI B channel: \texttt{BVALID}, \texttt{BRESP}, \texttt{BID}. \texttt{BID} is recovered from \texttt{txn\_tag[7:2]}. Generates \texttt{DECERR} when an error status is received from the Response Tracker, and \texttt{OKAY} otherwise. Single path to the AXI B channel — no arbitration mux required.
+
+\textbf{Error Handler.}
+Receives address error notifications from the Request Validator. Sets \texttt{pkt\_type = Err\_write} and forwards the transaction into the normal pipeline via the Transaction Tag Allocator. W beats for the transaction flow through the pipeline without draining or discarding. MC Core receives the \texttt{Err\_write} packet and returns an error completion; \texttt{DECERR} is subsequently generated by the B Response Generator on the AXI B channel.
+
+\subsection{Write Packet Format}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrl}
+\toprule
+\textbf{Field} & \textbf{Width (bits)} & \textbf{Description} \\
+\midrule
+\texttt{pkt\_type} & 2   & Packet type: \texttt{00=Write, 01=Read, 10=Err\_write, 11=Err\_read} \\
+\texttt{txn\_tag}  & 8   & Transaction tag (\texttt{AXID[5:0] + seqnum[1:0]}) \\
+\texttt{addr}      & 32  & Write address \\
+\texttt{data}      & 512 & Write data payload \\
+\texttt{wrapper}   & 64  & Byte-level validity mask (1 bit = 1 byte) \\
+\midrule
+\textbf{Total}     & \textbf{618} & \texttt{PKT\_DATA[617:0]} \\
+\bottomrule
+\end{tabular}
+\caption{Write Packet Format}
+\end{table}
+
+\subsection{Write Path Backpressure Chain}
+
+Backpressure propagates right-to-left through the write pipeline:
+
+\begin{lstlisting}
+MC Core busy -> PKT_READY = 0
+    -> Packet FIFO fills up
+    -> Packet Formation Unit stalls
+    -> Burst Splitter stalls
+    -> W Data FIFO absorbs backpressure
+    -> W Data FIFO full -> WREADY = 0
+    -> AW Metadata FIFO full -> AWREADY = 0
+\end{lstlisting}
+
+This avoids materializing large bursts upfront and keeps buffering requirements bounded.
+
+% ─────────────────────────────────────────────
+\section{Read Path}
+
+\subsection{Overview}
+
+The read path accepts AXI read transactions on the AR channel, validates them, splits bursts into normalized read request packets, forwards them to MC Core, and reassembles in-order read data for AXI R channel delivery. MC Core may return completions out of order; the CIF Reorder Buffer restores per-AXID AXI ordering before response generation.
+
+\subsection{Block Descriptions}
+
+\textbf{AR Metadata FIFO (depth = N\_AR = $4 \times$ N\_CLIENTS).}
+Captures and buffers incoming AR channel metadata: \texttt{ARADDR}, \texttt{ARLEN}, \texttt{ARSIZE}, \texttt{ARBURST}, \texttt{ARID}. Decouples AXI request arrival from downstream processing. Each AXI client is statically allocated 4 slots. \texttt{ARREADY} is driven low when no slots are available for the requesting client.
+
+\textbf{Request Validator.}
+Performs address legality checks only. Protocol-level constraints are enforced as design-time assertions and are not checked at runtime. Valid requests proceed to the Transaction Tag Allocator. Address errors are forwarded to the Error Handler with \texttt{ARID} preserved.
+
+\textbf{Transaction Tag Allocator.}
+Shared across all \texttt{N\_CLIENTS} AXI clients. Same encoding as the write path:
+\begin{lstlisting}
+txn_tag[7:0] = AXID[5:0] + seqnum[1:0]
+\end{lstlisting}
+Accepts inputs from both the Request Validator (valid requests) and the Error Handler (NOP transactions). Seqnum is monotonically increasing per AXID and wraps at 4.
+
+\textbf{Burst Splitter.}
+Shared across all \texttt{N\_CLIENTS} AXI clients. Same two-stage pipeline as write path. Generates per-beat read request contexts containing \texttt{txn\_tag} and \texttt{addr}.
+
+\textbf{Packet Formation Unit.}
+Assembles normalized 42-bit read request packets:
+\begin{lstlisting}
+pkt_type   [1:0]    2 bits  (00=Write, 01=Read, 10=Err_write, 11=Err_read)
+txn_tag    [9:2]    8 bits
+addr       [41:10] 32 bits
+Total: 42 bits      PKT_DATA[41:0]
+\end{lstlisting}
+
+\textbf{Packet FIFO (depth = N\_PKT).}
+Buffers normalized read request packets before forwarding to MC Core.
+
+\textbf{Read Transaction Table (RTT).}
+Allocated at tag assignment time. Stores per-transaction metadata:
+\begin{itemize}[noitemsep]
+    \item \texttt{AXID}
+    \item \texttt{expected\_packets} (from \texttt{ARLEN+1})
+    \item \texttt{completed\_packets}
+\end{itemize}
+Asserts \texttt{rob\_last} when \texttt{completed\_packets == expected\_packets}, signalling the final beat of a transaction to Merge Logic. Entry is freed after \texttt{rob\_last} is emitted.
+
+\textbf{Reorder Buffer (ROB).}
+Stores out-of-order read completions from MC Core and emits them in-order per AXID. Depth is tied to \texttt{MC\_RD\_BUF} — the ROB never needs more slots than MC Core can have in-flight simultaneously.
+
+Structure:
+\begin{lstlisting}
+ROB[MC_RD_BUF]  -- flat buffer, depth = 64
+Each slot:
+    valid     1 bit
+    data    512 bits
+    status    4 bits
+
+Free list: 64 entries
+Lookup table: (AXID, seqnum) -> slot index
+\end{lstlisting}
+
+On tag allocation:
+\begin{lstlisting}
+pop free slot index from free list
+store mapping: (AXID, seqnum) -> slot index in lookup table
+\end{lstlisting}
+
+On MC completion:
+\begin{lstlisting}
+extract AXID = tag[7:2], seqnum = tag[1:0]
+lookup slot index from (AXID, seqnum)
+ROB[slot].data   = completion data
+ROB[slot].status = completion status
+ROB[slot].valid  = 1
+
+emit loop:
+    while ROB[slot_at_head].valid == 1:
+        emit to Merge Logic
+        ROB[slot_at_head].valid = 0
+        push slot back to free list
+        advance head pointer for AXID
+\end{lstlisting}
+
+Depth: \texttt{MC\_RD\_BUF = 64}. Implemented as dual-port SRAM/BRAM. Watermark threshold: \texttt{MC\_RD\_BUF - ROB\_WATERMARK = 64 - 26 = 38}.
+
+\textbf{Merge Logic.}
+Receives in-order beats from the ROB and performs per-ID beat sequencing. Streams ordered \texttt{RDATA} to the R Response Generator.
+
+\textbf{R Response Generator.}
+AXI R channel driver. Restores \texttt{RID} from \texttt{txn\_tag[7:2]}, generates \texttt{RLAST}, \texttt{RRESP}, asserts \texttt{RVALID}, and drives \texttt{RDATA}. Generates \texttt{DECERR} when an error status is received from the ROB, and \texttt{OKAY} otherwise. Single path to the AXI R channel — no arbitration mux required.
+
+\textbf{Error Handler.}
+Receives address error notifications from the Request Validator with \texttt{ARID} preserved. Sets \texttt{pkt\_type = Err\_read} and forwards the transaction into the normal pipeline via the Transaction Tag Allocator. MC Core receives the \texttt{Err\_read} packet and returns an error completion; \texttt{DECERR} is subsequently generated by the R Response Generator on the AXI R channel.
+
+\subsection{Read Packet Format}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrl}
+\toprule
+\textbf{Field} & \textbf{Width (bits)} & \textbf{Description} \\
+\midrule
+\texttt{pkt\_type} & 2  & Packet type: \texttt{00=Write, 01=Read, 10=Err\_write, 11=Err\_read} \\
+\texttt{txn\_tag}  & 8  & Transaction tag (\texttt{AXID[5:0] + seqnum[1:0]}) \\
+\texttt{addr}      & 32 & Read address \\
+\midrule
+\textbf{Total}     & \textbf{42} & \texttt{PKT\_DATA[41:0]} \\
+\bottomrule
+\end{tabular}
+\caption{Read Packet Format}
+\end{table}
+
+\subsection{Read Path Backpressure Chain}
+
+MC Core does not support backpressure on the completion interface (\texttt{RESP\_READY} must always be 1). CIF must therefore ensure the ROB never fills completely. Backpressure is applied by halting new read requests to MC Core when the ROB occupancy reaches the watermark threshold:
+
+\begin{lstlisting}
+ROB occupancy >= MC_RD_BUF - ROB_WATERMARK  (= 64 - 26 = 38)
+    -> PKT_READY = 0  (stop sending new requests to MC)
+    -> Packet FIFO fills up
+    -> Burst Splitter stalls
+    -> AR Metadata FIFO absorbs backpressure
+    -> AR Metadata FIFO full -> ARREADY = 0
+\end{lstlisting}
+
+The \texttt{ROB\_WATERMARK = 26} headroom ensures all in-flight requests already accepted by MC Core can return completions without overflowing the ROB.
+
+% ─────────────────────────────────────────────
+\section{CIF \texorpdfstring{$\leftrightarrow$}{<->} MC Core Interface}
+
+\subsection{Write Interface (CIF \texorpdfstring{$\rightarrow$}{->} MC Core)}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrl}
+\toprule
+\textbf{Signal} & \textbf{Width} & \textbf{Description} \\
+\midrule
+\texttt{PKT\_VALID} & 1   & Packet valid \\
+\texttt{PKT\_READY} & 1   & MC Core ready to accept \\
+\texttt{PKT\_DATA}  & 618 & Serialized write packet \\
+\bottomrule
+\end{tabular}
+\caption{Write Request Interface}
+\end{table}
+
+\subsection{Read Interface (CIF \texorpdfstring{$\rightarrow$}{->} MC Core)}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrl}
+\toprule
+\textbf{Signal} & \textbf{Width} & \textbf{Description} \\
+\midrule
+\texttt{PKT\_VALID} & 1  & Packet valid \\
+\texttt{PKT\_READY} & 1  & MC Core ready to accept \\
+\texttt{PKT\_DATA}  & 42 & Serialized read request packet \\
+\bottomrule
+\end{tabular}
+\caption{Read Request Interface}
+\end{table}
+
+\subsection{Completion Interface (MC Core \texorpdfstring{$\rightarrow$}{->} CIF)}
+
+Agreed with MC Core team. \texttt{RESP\_READY} must be held high at all times by CIF — MC Core does not support backpressure on the completion path.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrl}
+\toprule
+\textbf{Signal} & \textbf{Width} & \textbf{Description} \\
+\midrule
+\texttt{RESP\_VALID}    & 1   & Completion valid \\
+\texttt{RESP\_READY}    & 1   & Must always be 1 (CIF always ready) \\
+\texttt{resp\_type}     & 2   & \texttt{00=RD\_DATA, 01=WR\_ACK, 10=ERR} \\
+\texttt{tag}            & 8   & \texttt{tag[7:2]=AXID, tag[1:0]=seqnum} \\
+\texttt{data}           & 512 & Read data (valid for \texttt{RD\_DATA} only) \\
+\texttt{status}         & 4   & Status/error code (encoding TBD with MC team) \\
+\bottomrule
+\end{tabular}
+\caption{MC Core Completion Interface — agreed with MC Core team}
+\end{table}
+
+\subsection{Packet Type Encoding}
+
+The \texttt{pkt\_type} field is carried in bits \texttt{[1:0]} of all CIF-to-MC-Core packets. Agreed with MC Core team.
+
+\begin{lstlisting}
+pkt_type[1:0]:
+    00 = Write     -- normal write transaction
+    01 = Read      -- normal read transaction
+    10 = Err_write -- address-error write; MC Core returns error completion
+    11 = Err_read  -- address-error read;  MC Core returns error completion
+\end{lstlisting}
+
+MC Core discards data for \texttt{Err\_write} and \texttt{Err\_read} packets and returns an error status on the completion interface. CIF maps this to \texttt{DECERR} on the AXI B or R channel respectively.
+
+\subsection{Tag Encoding}
+
+\begin{lstlisting}
+txn_tag[7:0]:
+    [7:2] = AXID   (6 bits, up to 64 unique IDs)
+    [1:0] = seqnum (2 bits, 0-3, per-AXID outstanding slot)
+\end{lstlisting}
+
+Agreed with MC Core team. MC Core returns the same \texttt{tag} value on completion that CIF embedded in the original request packet.
+
+% ─────────────────────────────────────────────
+\section{Edge Cases and Design Decisions}
+
+\subsection{Invalid Request Handling — Write Path}
+The Request Validator performs address legality checks only at runtime. On an address error, the Error Handler sets \texttt{pkt\_type = Err\_write} and injects the transaction into the normal pipeline via the Transaction Tag Allocator. W beats for the transaction flow through the W Data FIFO and Packet Formation Unit without modification. MC Core receives the \texttt{Err\_write} packet, discards the data, and returns an error completion. The B Response Generator drives \texttt{BRESP = DECERR} on the AXI B channel. No W beat draining or direct error bypass path is required.
+
+\subsection{Invalid Request Handling — Read Path}
+On an address error, the Error Handler sets \texttt{pkt\_type = Err\_read} and injects the transaction into the normal pipeline. MC Core receives the \texttt{Err\_read} packet and returns an error completion. The R Response Generator drives \texttt{RRESP = DECERR} on the AXI R channel. No ROB slot is bypassed and no special read-path handling is required.
+
+\subsection{Protocol Violation Handling}
+Burst type violations, WRAP illegality, alignment errors, and maximum burst length violations are not checked at runtime. Compliant AXI4 masters are assumed. These constraints are enforced as design-time assertions in the verification environment only.
+
+\subsection{Error Response Path}
+Both read and write paths use a single response path — the normal Response Generator drives the AXI R and B channels respectively. The arbitration mux previously used to multiplex error and normal responses has been removed. All responses, including \texttt{DECERR}, are generated by the Response Generator based on the completion status received from MC Core.
+
+\subsection{Out-of-Order Completion Handling}
+MC Core may return read completions out of order. The ROB absorbs OoO completions using a flat buffer indexed by dynamically allocated slot. On completion, CIF resolves the slot index via a lookup table keyed on \texttt{(AXID, seqnum)}. In-order emission per AXID is maintained by tracking a head pointer per AXID; a slot is emitted and freed only when the head slot for that AXID is valid. This guarantees AXI R channel ordering compliance.
+
+\subsection{ROB Sizing and Overflow Prevention}
+The ROB depth is tied to \texttt{MC\_RD\_BUF} — the MC Core internal read buffer depth. The ROB never needs more entries than MC Core can have in-flight simultaneously. With \texttt{MC\_RD\_BUF = 64}, the ROB is 64 entries deep. Since \texttt{RESP\_READY} must always be 1, CIF cannot stall incoming completions. Instead, CIF halts new read request issuance (\texttt{PKT\_READY = 0}) when ROB occupancy reaches \texttt{MC\_RD\_BUF - ROB\_WATERMARK = 38}. The \texttt{ROB\_WATERMARK = 26} headroom absorbs all completions in-flight within MC Core without ROB overflow.
+
+\subsection{Seqnum Ordering Guarantee}
+The Transaction Tag Allocator guarantees monotonically increasing seqnums per AXID. This property underpins the correctness of the ROB head-pointer ordering scheme. Seqnum allocation stalls if all 4 outstanding slots for an AXID are occupied, providing implicit backpressure on the request path.
+
+\subsection{N\_CLIENTS Scalability}
+\texttt{N\_CLIENTS} is a compile-time parameter. AR and AW metadata FIFO depths scale as \texttt{4 $\times$ N\_CLIENTS}, ensuring each client always has 4 guaranteed outstanding slots. Idle clients retain their allocated slots; unutilized capacity is not reclaimed dynamically in this revision. A future CIF revision will introduce a shared slot pool — with 2 guaranteed slots per client and the remaining \texttt{(total\_depth - 2 $\times$ N\_CLIENTS)} slots dynamically allocated — controlled by a QoS-aware arbitration fabric.
+
