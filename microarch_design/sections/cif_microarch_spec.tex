@@ -201,13 +201,12 @@ Stores out-of-order read completions from MC Core and emits them in-order per AX
 
 Structure:
 \begin{lstlisting}
-ROB[MC_RD_BUF]  -- flat buffer, depth = 64
+ROB[ROB_DEPTH]  -- flat buffer, depth = 256
 Each slot:
     valid     1 bit
     data    512 bits
     status    4 bits
-
-Free list: 64 entries
+Free list: 256 entries
 Lookup table: (AXID, seqnum) -> slot index
 \end{lstlisting}
 
@@ -233,10 +232,17 @@ emit loop:
         advance head pointer for AXID
 \end{lstlisting}
 
-Depth: \texttt{MC\_RD\_BUF = 64}. Implemented as dual-port SRAM/BRAM. Watermark threshold: \texttt{MC\_RD\_BUF - ROB\_WATERMARK = 64 - 26 = 38}.
+Depth: \texttt{ROB\_DEPTH = 256}. Implemented as dual-port SRAM/BRAM. Watermark threshold: \texttt{ROB\_DEPTH - ROB\_WATERMARK = 256 - 128 = 128}.
 
 \textbf{Merge Logic.}
-Receives in-order beats from the ROB and performs per-ID beat sequencing. Streams ordered \texttt{RDATA} to the R Response Generator.
+Merge Logic is a purely combinational block that sits between the ROB and the R Response Generator. It has no internal storage and introduces no buffering. Its responsibilities are:
+\begin{itemize}[noitemsep]
+  \item \textbf{RID recovery:} Extracts \texttt{RID[5:0] = AXID[5:0]} from the ROB-emitted beat. Per-AXID ordering is already guaranteed by the ROB head pointer scheme — Merge Logic does not perform any reordering.
+  \item \textbf{RLAST generation:} Asserts \texttt{RLAST} when \texttt{rob\_last} is received coincident with the final data beat. \texttt{rob\_last} arrives as a sideband signal from the RTT in parallel with the ROB data beat — Merge Logic combines both in the same cycle.
+  \item \textbf{Status passthrough:} Forwards \texttt{status[3:0]} from the ROB to the R Response Generator unchanged. The R Response Generator maps non-zero status to \texttt{DECERR} on the AXI R channel.
+  \item \textbf{Data passthrough:} Forwards \texttt{data[511:0]} from the ROB to the R Response Generator unchanged.
+\end{itemize}
+Merge Logic does not arbitrate between AXIDs — the ROB Emit Logic's priority encoder already selects one AXID per cycle. Merge Logic sees a single beat per cycle at most and forwards it directly. No inter-AXID buffering or sequencing is required here.
 
 \textbf{R Response Generator.}
 AXI R channel driver. Restores \texttt{RID} from \texttt{txn\_tag[7:2]}, generates \texttt{RLAST}, \texttt{RRESP}, asserts \texttt{RVALID}, and drives \texttt{RDATA}. Generates \texttt{DECERR} when an error status is received from the ROB, and \texttt{OKAY} otherwise. Single path to the AXI R channel — no arbitration mux required.
@@ -267,16 +273,14 @@ Receives address error notifications from the Request Validator with \texttt{ARI
 MC Core does not support backpressure on the completion interface (\texttt{RESP\_READY} must always be 1). CIF must therefore ensure the ROB never fills completely. Backpressure is applied by halting new read requests to MC Core when the ROB occupancy reaches the watermark threshold:
 
 \begin{lstlisting}
-ROB occupancy >= MC_RD_BUF - ROB_WATERMARK  (= 64 - 26 = 38)
+ROB occupancy >= ROB_DEPTH - ROB_WATERMARK  (= 256 - 128 = 128)
     -> PKT_READY = 0  (stop sending new requests to MC)
     -> Packet FIFO fills up
     -> Burst Splitter stalls
     -> AR Metadata FIFO absorbs backpressure
     -> AR Metadata FIFO full -> ARREADY = 0
 \end{lstlisting}
-
-The \texttt{ROB\_WATERMARK = 26} headroom ensures all in-flight requests already accepted by MC Core can return completions without overflowing the ROB.
-
+The \texttt{ROB\_WATERMARK = 128} headroom ensures all in-flight requests already accepted by MC Core can return completions without overflowing the ROB. This value is derived conservatively from MC Core's confirmed maximum pipeline depth of 100, rounded up to account for scheduler speculation and forward pressure.
 % ─────────────────────────────────────────────
 \section{CIF \texorpdfstring{$\leftrightarrow$}{<->} MC Core Interface}
 
@@ -376,7 +380,7 @@ Both read and write paths use a single response path — the normal Response Gen
 MC Core may return read completions out of order. The ROB absorbs OoO completions using a flat buffer indexed by dynamically allocated slot. On completion, CIF resolves the slot index via a lookup table keyed on \texttt{(AXID, seqnum)}. In-order emission per AXID is maintained by tracking a head pointer per AXID; a slot is emitted and freed only when the head slot for that AXID is valid. This guarantees AXI R channel ordering compliance.
 
 \subsection{ROB Sizing and Overflow Prevention}
-The ROB depth is tied to \texttt{MC\_RD\_BUF} — the MC Core internal read buffer depth. The ROB never needs more entries than MC Core can have in-flight simultaneously. With \texttt{MC\_RD\_BUF = 64}, the ROB is 64 entries deep. Since \texttt{RESP\_READY} must always be 1, CIF cannot stall incoming completions. Instead, CIF halts new read request issuance (\texttt{PKT\_READY = 0}) when ROB occupancy reaches \texttt{MC\_RD\_BUF - ROB\_WATERMARK = 38}. The \texttt{ROB\_WATERMARK = 26} headroom absorbs all completions in-flight within MC Core without ROB overflow.
+The ROB depth is sized to ensure the ROB never overflows given MC Core's maximum in-flight pipeline depth. \texttt{MC\_RD\_BUF = 100} is MC Core's confirmed maximum pipeline depth. \texttt{ROB\_DEPTH = 256} is chosen as the next power of two above \texttt{2 $\times$ MC\_RD\_BUF}, providing margin for scheduler speculation and forward pressure. Since \texttt{RESP\_READY} must always be 1, CIF cannot stall incoming completions. Instead, CIF halts new read request issuance (\texttt{PKT\_READY = 0}) when ROB occupancy reaches \texttt{ROB\_DEPTH - ROB\_WATERMARK = 128}. The \texttt{ROB\_WATERMARK = 128} headroom absorbs all completions in-flight within MC Core without ROB overflow.
 
 \subsection{Seqnum Ordering Guarantee}
 The Transaction Tag Allocator guarantees monotonically increasing seqnums per AXID. This property underpins the correctness of the ROB head-pointer ordering scheme. Seqnum allocation stalls if all 4 outstanding slots for an AXID are occupied, providing implicit backpressure on the request path.

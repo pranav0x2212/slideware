@@ -1,7 +1,7 @@
 \section{Reorder Buffer (ROB)}
 \subsection{Overview}
 
-The Reorder Buffer (ROB) absorbs out-of-order read completions from MC Core and emits them in-order per AXID to Merge Logic. Depth is tied to \texttt{MC\_RD\_BUF = 64}. Since \texttt{RESP\_READY} must always be held high, the ROB can never stall incoming completions — backpressure is instead applied by halting new read requests when occupancy reaches the watermark threshold.
+The Reorder Buffer (ROB) absorbs out-of-order read completions from MC Core and emits them in-order per AXID to Merge Logic. Depth is tied to \texttt{MC\_RD\_BUF = 100} (MC Core confirmed maximum in-flight pipeline depth). Since \texttt{RESP\_READY} must always be held high, the ROB can never stall incoming completions — backpressure is instead applied by halting new read requests when occupancy reaches the watermark threshold.
 
 \subsection*{Input Signals}
 \begin{longtable}{p{3cm}p{1cm}p{3cm}p{7cm}}
@@ -51,7 +51,7 @@ The Reorder Buffer (ROB) absorbs out-of-order read completions from MC Core and 
   \item Up/down counter, range 0--64.
   \item Incremented by \texttt{alloc\_req} from Free List.
   \item Decremented by \texttt{free\_req} from Emit Logic.
-  \item Asserts \texttt{watermark\_hit} when count $\geq$ \texttt{MC\_RD\_BUF} $-$ \texttt{ROB\_WATERMARK} $= 38$.
+  \item Asserts \texttt{watermark\_hit} when count $\geq$ \texttt{ROB\_DEPTH} $-$ \texttt{ROB\_WATERMARK} $= 128$.
 \end{itemize}
 
 \subsection{Lookup Table}
@@ -94,9 +94,15 @@ The Reorder Buffer (ROB) absorbs out-of-order read completions from MC Core and 
         AXID has no in-flight slots (occupancy transitions 0\textrightarrow{}1 for that AXID).
         On subsequent allocations for the same AXID, \texttt{head[AXID]} is \emph{not} updated
         — it is owned exclusively by Emit Logic from that point forward.
-  \item Advanced by Emit Logic after each emit: incremented to the next expected slot index.
-  \item Reset to the next \texttt{free\_slot\_idx} only when all in-flight slots for an AXID
-        have been emitted and a new allocation arrives (occupancy returns to 0 then rises again).
+  \item Advanced by Emit Logic after each emit: Emit Logic computes
+        \texttt{next\_seqnum = (current\_seqnum + 1) \% 4}, then reads
+        \texttt{slot\_idx} for \texttt{\{AXID, next\_seqnum\}} from the Lookup Table
+        and writes it into \texttt{head[AXID]}. The head pointer stores a slot index,
+        not a seqnum — direct increment is incorrect since the Free List assigns slot
+        indices non-contiguously.
+  \item Reset to \texttt{free\_slot\_idx} from the Free List only when all in-flight slots
+        for an AXID have been emitted and a new allocation arrives (per-AXID occupancy
+        returns to 0 then rises again to 1).
   \item All 64 head pointers drive the ROB BRAM read port simultaneously each cycle.
 \end{itemize}
 
@@ -155,7 +161,8 @@ The Reorder Buffer (ROB) absorbs out-of-order read completions from MC Core and 
   \item BRAM returns \texttt{valid} bits for all 64 head slots (1-cycle latency).
   \item Priority encoder in Emit Logic selects lowest AXID with \texttt{valid=1}.
   \item Emit Logic reads \texttt{data} and \texttt{status} from selected slot; forwards to Merge Logic with \texttt{AXID} and \texttt{last\_beat}.
-  \item Slot is freed: \texttt{valid} cleared, \texttt{head[AXID]} advanced, Free List bit set, Occupancy Counter decremented, Lookup Table entry cleared.
+  \item Slot is freed: \texttt{valid} cleared, Free List bit set, Occupancy Counter decremented, Lookup Table entry cleared.
+  \item \texttt{head[AXID]} advanced: Emit Logic reads \texttt{slot\_idx} for \texttt{\{AXID, next\_seqnum\}} from Lookup Table and writes into \texttt{head[AXID]}. This read occurs before the Lookup Table clear in the same cycle — clear only affects the just-emitted \texttt{current\_seqnum} entry, not \texttt{next\_seqnum}.
 \end{enumerate}
 
 \subsection{Backpressure \& Overflow Prevention}
@@ -165,7 +172,7 @@ The Reorder Buffer (ROB) absorbs out-of-order read completions from MC Core and 
 \toprule
 \textbf{Signal} & \textbf{Description} \\
 \midrule
-watermark\_hit  & Asserted when occupancy $\geq$ 38. Drives PKT\_READY control. \\
+watermark\_hit  & Asserted when occupancy $\geq$ 128. Drives PKT\_READY control. \\
 PKT\_READY=0    & Stops Packet FIFO from issuing new read requests to MC Core. \\
 RESP\_READY=1   & Tied high permanently. ROB can never stall MC Core completions. \\
 \bottomrule
@@ -173,7 +180,7 @@ RESP\_READY=1   & Tied high permanently. ROB can never stall MC Core completions
 \end{center}
 
 \medskip
-\noindent Watermark headroom = \texttt{ROB\_WATERMARK = 26}. Ensures all requests already accepted by MC Core can return completions without overflowing the ROB.
+\noindent \texttt{ROB\_WATERMARK = 128}, derived from MC Core's confirmed maximum pipeline depth of 100, rounded up conservatively to account for scheduler speculation and forward pressure. This headroom ensures all completions in-flight within MC Core after \texttt{PKT\_READY} deasserts can return without overflowing the ROB.
 
 \subsection{Key Parameters}
 
@@ -182,13 +189,15 @@ RESP\_READY=1   & Tied high permanently. ROB can never stall MC Core completions
 \toprule
 \textbf{Parameter} & \textbf{Value} \\
 \midrule
-ROB depth         & 64 entries (\texttt{MC\_RD\_BUF}) \\
-Slot width        & 517 bits (1 valid + 512 data + 4 status) \\
-Free list width   & 64 bits \\
-Lookup table      & 256 entries $\times$ 6-bit slot index \\
-Head pointers     & 64 $\times$ 6-bit registers \\
-Watermark         & 38 (64 $-$ 26) \\
-Max emissions     & 1 per cycle \\
+ROB depth             & 256 entries \\
+Slot width            & 517 bits (1 valid + 512 data + 4 status) \\
+Free list width       & 256 bits \\
+Lookup table          & 256 entries $\times$ 8-bit slot index \\
+Head pointers         & 64 $\times$ 8-bit registers \\
+Watermark threshold   & 128 (\texttt{ROB\_DEPTH} $-$ \texttt{ROB\_WATERMARK} $= 256 - 128$) \\
+\texttt{MC\_RD\_BUF}  & 100 (MC Core confirmed max pipeline depth) \\
+\texttt{ROB\_WATERMARK} & 128 (conservative; covers speculation and forward pressure) \\
+Max emissions         & 1 per cycle \\
 \bottomrule
 \end{tabular}
 \end{center}

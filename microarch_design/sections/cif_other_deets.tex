@@ -105,6 +105,7 @@ Handshake types used below:
 \midrule
 \texttt{REQ\_VALID}    & 1 & out & Error Handler & Tag Allocator & Pulse & NOP allocation request; \texttt{pkt\_type} pre-set to \texttt{Err\_write} \\
 \texttt{AXID[5:0]}     & 6 & out & Error Handler & Tag Allocator & Pulse & AXI ID for NOP tag allocation \\
+\texttt{AWLEN[7:0]}    & 8 & out & Error Handler & Tag Allocator & Pulse & Burst length forwarded from AW Metadata FIFO; required so Tag Allocator can initialise \texttt{exp\_pkts = AWLEN+1} in the Response Tracker \\
 \bottomrule
 \end{tabularx}
 
@@ -274,6 +275,7 @@ Handshake types used below:
 \midrule
 \texttt{REQ\_VALID}    & 1 & out & Error Handler & Tag Allocator & Pulse & NOP allocation request; \texttt{pkt\_type} pre-set to \texttt{Err\_read} \\
 \texttt{AXID[5:0]}     & 6 & out & Error Handler & Tag Allocator & Pulse & AXI ID for NOP tag allocation \\
+\texttt{ARLEN[7:0]}    & 8 & out & Error Handler & Tag Allocator & Pulse & Burst length forwarded from AR Metadata FIFO; required so Tag Allocator can initialise \texttt{exp\_pkts = ARLEN+1} in the RTT \\
 \bottomrule
 \end{tabularx}
 
@@ -623,17 +625,17 @@ transactions.
 \subsection{BRAM Initialization Note}
 
 The ROB BRAM \texttt{valid} bits are the only BRAM state that must be
-explicitly initialized. On the cycle \texttt{rst\_n} deasserts, all 64
+explicitly initialized. On the cycle \texttt{rst\_n} deasserts, all 256
 \texttt{valid} bits must read as 0. This is achieved by:
 \begin{itemize}
   \item Using a synchronous-reset flip-flop for each \texttt{valid} bit
         (implemented as distributed RAM or shadow registers alongside the BRAM
         data), \textbf{or}
-  \item Performing a 64-cycle initialization write loop on the BRAM write port
+  \item Performing a 256-cycle initialization write loop on the BRAM write port
         during reset, setting \texttt{valid = 0} at each address before
         \texttt{rst\_n} deasserts.
 \end{itemize}
-The second option requires holding \texttt{rst\_n} low for at least 64 cycles
+The second option requires holding \texttt{rst\_n} low for at least 256 cycles
 after POR. This is the recommended approach for UltraScale BRAM inference.
 
 \newpage
