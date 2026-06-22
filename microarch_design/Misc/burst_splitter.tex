@@ -1,0 +1,184 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{titlesec}
+\usepackage{parskip}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{enumitem}
+
+\hypersetup{colorlinks=true, linkcolor=black, urlcolor=blue}
+
+\titleformat{\section}{\large\bfseries}{}{0em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{}{0em}{}
+
+\title{\textbf{Burst Splitter Internal Logic}}
+\date{}
+\author{}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+
+\section{Overview}
+
+The Burst Splitter is a two-stage pipelined block shared across all \texttt{N\_CLIENTS} AXI clients. It sits between the AW/AR FIFO and the Packet Formation Unit. Its function is to convert validated AXI burst requests into normalized per-beat packets, splitting bursts that cross DRAM row boundaries into two sub-transactions.
+
+\medskip
+\noindent\textbf{Input:} AW/AR FIFO output --- \texttt{ADDR}, \texttt{AXID}, \texttt{AXLEN}, \texttt{AXSIZE}, \texttt{AXBURST}
+
+\noindent\textbf{Output:} Per-beat context (\texttt{addr}, \texttt{tag}, \texttt{pkt\_type}, \texttt{beat\_cnt}) $\rightarrow$ Packet Formation Unit via \texttt{pkt\_valid}
+
+\section{Stage 1 --- Decode \& Compute (1 cycle, registered output)}
+
+Stage 1 runs combinatorially and captures all results into the S1$\rightarrow$S2 pipeline register on the next clock edge. Three sub-blocks operate in parallel:
+
+\subsection{Burst Type Decoder}
+\begin{itemize}[noitemsep]
+  \item Input: \texttt{AXBURST[1:0]} from FIFO
+  \item Output: \texttt{is\_wrap} / \texttt{is\_incr} flag $\rightarrow$ pipeline register
+  \item FIXED burst type is not supported (design-time assertion)
+\end{itemize}
+
+\subsection{Row Boundary Checker}
+\begin{itemize}[noitemsep]
+  \item Inputs: \texttt{ADDR}, \texttt{AXLEN}, \texttt{AXSIZE} from FIFO
+  \item Computes: \texttt{addr\_start + burst\_bytes} vs \texttt{ROW\_MASK}
+  \item Outputs: \texttt{split\_needed} flag, \texttt{row\_boundary} address $\rightarrow$ Split Point Calc and Beat Count Calc
+\end{itemize}
+
+\subsection{WRAP Address Generator}
+\begin{itemize}[noitemsep]
+  \item Inputs: \texttt{ADDR}, \texttt{AXLEN}, \texttt{AXSIZE} from FIFO
+  \item Active only when \texttt{is\_wrap = 1}
+  \item Outputs: \texttt{wrap\_boundary}, \texttt{beat\_addrs[0..N]} $\rightarrow$ pipeline register
+  \item Maximum 16 entries (AXI4 WRAP burst max \texttt{AXLEN} = 15)
+\end{itemize}
+
+\subsection{Split Point Calc}
+\begin{itemize}[noitemsep]
+  \item Inputs: \texttt{row\_boundary} from Row Boundary Checker; \texttt{ADDR} from FIFO
+  \item Computes: \texttt{addr\_b = row\_boundary}, \texttt{beat\_cnt\_b = total\_beats $-$ beat\_cnt\_a}
+  \item Output: \texttt{addr\_b}, \texttt{beat\_cnt\_b} $\rightarrow$ pipeline register
+\end{itemize}
+
+\subsection{Beat Count Calc}
+\begin{itemize}[noitemsep]
+  \item Inputs: \texttt{row\_boundary} from Row Boundary Checker; \texttt{AXLEN} from FIFO
+  \item Computes: \texttt{beat\_cnt\_a = beats\_to\_row\_end}, \texttt{total\_beats = AXLEN + 1}
+  \item Output: \texttt{beat\_cnt\_a}, \texttt{total\_beats} $\rightarrow$ pipeline register
+\end{itemize}
+
+\subsection{S1$\rightarrow$S2 Pipeline Register (clocked)}
+
+\begin{center}
+\texttt{\{ addr\_a, beat\_cnt\_a, addr\_b, beat\_cnt\_b, split\_needed, is\_wrap, beat\_addrs[], axid, pkt\_type, tag \}}
+\end{center}
+
+\section{Stage 2 --- Emit \& Track}
+
+Stage 2 is multi-cycle when a split is needed. It stalls Stage 1 (via \texttt{s1\_busy}) while emitting sub-transaction B.
+
+\subsection{Emit FSM}
+
+\begin{itemize}[noitemsep]
+  \item \texttt{IDLE $\rightarrow$ EMIT\_A}
+  \item \texttt{EMIT\_A $\rightarrow$ IDLE} \hfill (split\_needed = 0)
+  \item \texttt{EMIT\_A $\rightarrow$ EMIT\_B} \hfill (split\_needed = 1)
+  \item \texttt{EMIT\_B $\rightarrow$ IDLE}
+  \item Hold current state if \texttt{pkt\_ready = 0}
+  \item Asserts \texttt{s1\_busy} during \texttt{EMIT\_B} to stall Stage 1
+\end{itemize}
+
+\subsection{Sub-transaction A Mux}
+\begin{itemize}[noitemsep]
+  \item Selects: \texttt{addr\_a}, \texttt{beat\_cnt\_a}, \texttt{tag}, \texttt{pkt\_type} from pipeline register
+  \item Forwards to Pkt Assembler on cycle N
+\end{itemize}
+
+\subsection{Sub-transaction B Mux}
+\begin{itemize}[noitemsep]
+  \item Selects: \texttt{addr\_b}, \texttt{beat\_cnt\_b}, same \texttt{tag}, \texttt{pkt\_type} from pipeline register
+  \item Forwards to Pkt Assembler on cycle N+1
+\end{itemize}
+
+\subsection{Beat Tracker}
+\begin{itemize}[noitemsep]
+  \item Maintains \texttt{beat\_cnt\_reg}; decrements on \texttt{pkt\_accept}
+  \item Asserts \texttt{last\_beat} flag when count reaches zero
+  \item Output: \texttt{last\_beat} $\rightarrow$ Pkt Assembler
+\end{itemize}
+
+\subsection{WRAP Beat Address Table}
+\begin{itemize}[noitemsep]
+  \item Up to 16-entry register file, written once on S1$\rightarrow$S2 pipeline register transfer
+  \item Input: \texttt{beat\_addrs[]} from S1$\rightarrow$S2 pipeline register
+  \item Read sequentially by \texttt{beat\_idx} counter
+  \item Output: current beat address $\rightarrow$ Pkt Assembler
+\end{itemize}
+
+\subsection{Pkt Assembler}
+\begin{itemize}[noitemsep]
+  \item Inputs: \texttt{addr}, \texttt{tag}, \texttt{pkt\_type}, \texttt{beat\_cnt} from Sub-txn A/B mux; \texttt{last\_beat} from Beat Tracker; beat address from WRAP beat addr table
+  \item Assembles normalized read (42-bit) or write (618-bit) packet
+  \item Asserts \texttt{pkt\_valid} $\rightarrow$ Packet Formation Unit
+\end{itemize}
+
+\section{Backpressure \& Control Signals}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{>{\ttfamily}l >{\ttfamily}l X}
+\toprule
+\textbf{Signal} & \textbf{Direction} & \textbf{Description} \\
+\midrule
+s1\_busy   & Emit FSM $\rightarrow$ AW/AR FIFO     & Stalls Stage 1 from consuming next FIFO entry during EMIT\_B \\
+pkt\_ready & Packet Formation Unit $\rightarrow$ Emit FSM & Back-pressure from downstream; FSM holds state when low \\
+pkt\_valid & Pkt Assembler $\rightarrow$ Packet Formation Unit & Indicates normalized packet ready for consumption \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Three Paths Through the Splitter}
+
+\begin{description}[noitemsep]
+  \item[Path A --- No split (INCR, no row crossing)] \hfill \\
+    \texttt{split\_needed = 0}. Stage 2 emits one packet (\texttt{EMIT\_A $\rightarrow$ IDLE} in 1 cycle). \texttt{s1\_busy} never asserted. Throughput: 1 transaction / cycle.
+
+  \item[Path B --- Row-boundary split (INCR, crosses boundary)] \hfill \\
+    \texttt{split\_needed = 1}. Stage 1 computes \texttt{addr\_b}, \texttt{beat\_cnt\_b}. Stage 2: \texttt{EMIT\_A} cycle N, asserts \texttt{s1\_busy}, \texttt{EMIT\_B} cycle N+1. Throughput: 1 transaction / 2 cycles.
+
+  \item[Path C --- WRAP burst] \hfill \\
+    WRAP address generator fills \texttt{beat\_addrs[]}. Stage 2 iterates via WRAP beat addr table indexed by \texttt{beat\_idx}. May also split at row boundary.
+\end{description}
+
+\section{Internal State}
+
+\begin{center}
+\begin{tabular}{>{\ttfamily}l l}
+\toprule
+\textbf{Field} & \textbf{Description} \\
+\midrule
+base\_addr   & Base address of current burst \\
+beat\_idx    & Current beat index within burst \\
+beats\_left  & Remaining beats to emit \\
+burst\_type  & INCR or WRAP \\
+burst\_len   & Total beats (AXLEN + 1) \\
+txn\_tag     & Allocated transaction tag \texttt{[AXID[5:0] + seqnum[1:0]]} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Timing Notes}
+
+\begin{itemize}[noitemsep]
+  \item Stage 1 combinatorial depth must close timing in 1 cycle. WRAP address generator is the critical path --- limited to AXLEN $\leq$ 15 for WRAP bursts (AXI4 constraint).
+  \item S1$\rightarrow$S2 register clocked at \texttt{posedge clk}.
+  \item \texttt{pkt\_ready = 0} holds the Emit FSM in its current state; \texttt{s1\_busy} remains asserted until \texttt{IDLE} is reached.
+  \item Tag Allocator must have a valid tag before Stage 1 can proceed --- Tag Allocator stall folds into \texttt{s1\_busy}.
+  \item Error path (\texttt{pkt\_type = Err\_write / Err\_read}): set in Stage 1, carried through pipeline register unchanged. Both sub-transactions on a split carry the same \texttt{pkt\_type}.
+\end{itemize}
+
+\end{document}
